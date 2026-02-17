@@ -53,26 +53,27 @@ The board uses a UART-based serial interface to configure parameters and control
 
 ### **Parameters**
 
-| Parameter      | Description                                         | Type    | Example Values |
-| -------------- | ----------------------------------------------------| ------- | -------------- |
-| `gear_ratio`   | Gear ratio of the drive                             | Integer | `1`, `5`, `15` |
-| `max_current`  | Maximum motor current (A)                           | Float   | `5.0`, `10.5`  |
-| `max_speed`    | Maximum motor speed (rad)                           | Float   | `1000.0`       |
-| `max_torque`   | Maximum torque output (Nm)                          | Float   | `1.2`          |
-| `angle_offset` | Motor angle offset (rad)                            | Float   | `0.0`, `15.5`  |
-| `min_angle`    | Minimum allowed angle (rad)                         | Float   | `-30.0`        |
-| `max_angle`    | Maximum allowed angle (rad)                         | Float   | `30.0`         |
-| `torque_const` | Torque constant (Nm/A)                              | Float   | `0.12`         |
-| `kp`           | Proportional gain (not for FOC, *specific control*) | Float   | `0.25`         |
-| `ki`           | Integral gain (not for FOC, *specific control*).    | Float   | `0.01`         |
-| `kd`           | Derivative gain (not for FOC, *specific control*)   | Float   | `0.005`        |
-| `filter_a`     | Main filter parameter A                             | Float   | `0.5`          |
-| `filter_g1`    | Filter gain 1                                       | Float   | `0.1`          |
-| `filter_g2`    | Filter gain 2                                       | Float   | `0.1`          |
-| `filter_g3`    | Filter gain 3                                       | Float   | `0.1`          |
-| `node_id`      | Cyphal/CAN node ID                                  | Integer | `1`, `42`      |
-| `data_baud`    | FDCAN data baud rate (enum, see below)              | Enum    | `KHz1000`      |
-| `nominal_baud` | FDCAN nominal baud rate (enum, see below)           | Enum    | `KHz500`       |
+| Parameter              | Description                                         | Type    | Example Values |
+| ---------------------- | ----------------------------------------------------| ------- | -------------- |
+| `gear_ratio`           | Gear ratio of the drive                             | Integer | `1`, `5`, `15` |
+| `max_current`          | Maximum motor current (A)                           | Float   | `5.0`, `10.5`  |
+| `max_speed`            | Maximum motor speed (rad)                           | Float   | `1000.0`       |
+| `max_torque`           | Maximum torque output (Nm)                          | Float   | `1.2`          |
+| `angle_offset`         | Motor angle offset (rad)                            | Float   | `0.0`, `15.5`  |
+| `min_angle`            | Minimum allowed angle (rad)                         | Float   | `-30.0`        |
+| `max_angle`            | Maximum allowed angle (rad)                         | Float   | `30.0`         |
+| `torque_const`         | Torque constant (Nm/A)                              | Float   | `0.12`         |
+| `kp`                   | Proportional gain (not for FOC, *specific control*) | Float   | `0.25`         |
+| `ki`                   | Integral gain (not for FOC, *specific control*).    | Float   | `0.01`         |
+| `kd`                   | Derivative gain (not for FOC, *specific control*)   | Float   | `0.005`        |
+| `filter_a`             | Main filter parameter A                             | Float   | `0.5`          |
+| `filter_g1`            | Filter gain 1                                       | Float   | `0.1`          |
+| `filter_g2`            | Filter gain 2                                       | Float   | `0.1`          |
+| `filter_g3`            | Filter gain 3                                       | Float   | `0.1`          |
+| `I_lpf_coefficient`    | Current low-pass filter coefficient                 | Float   | `0.1`          |
+| `node_id`              | Cyphal/CAN node ID                                  | Integer | `1`, `42`      |
+| `data_baud`            | FDCAN data baud rate (enum, see below)              | Enum    | `KHz1000`      |
+| `nominal_baud`         | FDCAN nominal baud rate (enum, see below)           | Enum    | `KHz500`       |
 
 ---
 

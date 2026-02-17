@@ -8,7 +8,7 @@
 #include <voltbro/motors/bldc/vbdrive/vbdrive.hpp>
 #include <voltbro/config/serial/serial.h>
 
-struct VBDriveConfig: public BaseConfigData {
+struct __attribute__((packed)) VBDriveConfig: public BaseConfigData {
     static constexpr uint32_t TYPE_ID = 0x44CCCBBB;
     uint8_t gear_ratio = 0;
     // NAN means not set
@@ -27,14 +27,13 @@ struct VBDriveConfig: public BaseConfigData {
     float filter_g1 = NAN;
     float filter_g2 = NAN;
     float filter_g3 = NAN;
+    float I_lpf_coefficient = NAN;
 
-    VBDriveConfig() {
+    VBDriveConfig(): BaseConfigData() {
         type_id = VBDriveConfig::TYPE_ID;
-        gear_ratio = 1;
-        filter_a = 0.0f;
     }
 
-    bool are_required_params_set();
+    bool are_required_params_set() override;
 
     void print_self(UARTResponseAccumulator& responses);
     void get(const std::string& param, UARTResponseAccumulator& responses);

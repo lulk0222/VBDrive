@@ -54,7 +54,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t size) {
 }
 
 bool VBDriveConfig::are_required_params_set() {
-    return true;
+    return BaseConfigData::are_required_params_set() && gear_ratio != 0;
 }
 
 static constexpr std::string GEAR_RATIO_PARAM = "gear_ratio";
@@ -72,6 +72,7 @@ static constexpr std::string FILTER_A_PARAM = "filter_a";
 static constexpr std::string FILTER_G1_PARAM = "filter_g1";
 static constexpr std::string FILTER_G2_PARAM = "filter_g2";
 static constexpr std::string FILTER_G3_PARAM = "filter_g3";
+static constexpr std::string FILTER_I_LPF_PARAM = "I_lpf";
 
 void VBDriveConfig::print_self(UARTResponseAccumulator& responses) {
     get(GEAR_RATIO_PARAM, responses);
@@ -89,6 +90,7 @@ void VBDriveConfig::print_self(UARTResponseAccumulator& responses) {
     get(FILTER_G1_PARAM, responses);
     get(FILTER_G2_PARAM, responses);
     get(FILTER_G3_PARAM, responses);
+    get(FILTER_I_LPF_PARAM, responses);
     get(NODE_ID_PARAM, responses);
     get(FDCAN_DATA_PARAM, responses);
     get(FDCAN_NOMINAL_PARAM, responses);
@@ -115,6 +117,7 @@ void VBDriveConfig::get(const std::string& param, UARTResponseAccumulator& respo
     CHECK_AND_PRINT_PARAM_FLOAT(filter_g1, FILTER_G1_PARAM)
     CHECK_AND_PRINT_PARAM_FLOAT(filter_g2, FILTER_G2_PARAM)
     CHECK_AND_PRINT_PARAM_FLOAT(filter_g3, FILTER_G3_PARAM)
+    CHECK_AND_PRINT_PARAM_FLOAT(I_lpf_coefficient, FILTER_I_LPF_PARAM)
     else {
         responses.append("ERROR: Unknown parameter\n\r");
     }
@@ -158,6 +161,7 @@ bool VBDriveConfig::set(const std::string& param, std::string& value, UARTRespon
     CHECK_AND_SET_PARAM_FLOAT(filter_g1, FILTER_G1_PARAM)
     CHECK_AND_SET_PARAM_FLOAT(filter_g2, FILTER_G2_PARAM)
     CHECK_AND_SET_PARAM_FLOAT(filter_g3, FILTER_G3_PARAM)
+    CHECK_AND_PRINT_PARAM_FLOAT(I_lpf_coefficient, FILTER_I_LPF_PARAM)
     else {
         responses.append("ERROR: Unknown parameter\n\r");
         return false;

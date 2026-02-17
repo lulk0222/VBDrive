@@ -128,11 +128,12 @@ void create_motor(VBDriveConfig& config_data) {
     motor = new (&motor_storage) VBDrive(
         0.000025f,
         // Kalman filter for determining electric angle
-        KalmanConfig {
+        FiltersConfig {
             .expected_a = value_or_default(config_data.filter_a, 0.0f),
-            .g1 = 0.015700989410003974f,
-            .g2 = 3.925227776360174f,
-            .g3 = 387.54711795263574f,
+            .g1 = value_or_default(config_data.filter_g1, 0.015700989410003974f),
+            .g2 = value_or_default(config_data.filter_g2, 3.925227776360174f),
+            .g3 = value_or_default(config_data.filter_g2, 387.54711795263574f),
+            .I_lpf_coefficient = value_or_default(config_data.I_lpf_coefficient, 0.0925f)
         },
         // Q Regulator
         PIDConfig {
@@ -225,7 +226,7 @@ void app() {
     create_motor(config_data);
     motor->start();
     apply_calibration();
-    motor->set_voltage_point(0.0f);
+    motor->set_foc_point(FOCTarget{0});
 
     start_cyphal();
     set_cyphal_mode(uavcan_node_Mode_1_0_OPERATIONAL);
