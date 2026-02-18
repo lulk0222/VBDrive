@@ -133,12 +133,6 @@ OK: max_speed :1200.000000
 
 ## FDCAN Cyphal Runtime Interface
 
-Here’s the **Cyphal Runtime Interface** section for the BLDC Motor Controller README:
-
----
-
-## Cyphal Runtime Interface
-
 The BLDC Motor Controller communicates over **Cyphal/FDCAN** to publish real-time telemetry and receive control commands.
 
 > We use some custom datatypes, see here: [VoltBro cyphal types repository](https://github.com/voltbro/cyphal-types)
