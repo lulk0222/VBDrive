@@ -13,6 +13,7 @@
 
 #include <cyphal/node/node_info_handler.h>
 #include <cyphal/node/registers_handler.hpp>
+#include <cyphal/node/registers_utils.hpp>
 #include <cyphal/providers/G4CAN.h>
 
 #include <uavcan/node/Mode_1_0.h>
@@ -266,6 +267,9 @@ static constexpr CanardPortID FOC_COMMAND_PORT = 2107;
 static constexpr CanardPortID FOC_STATE_PORT = 3811;
 static constexpr CanardPortID SPECIFIC_CONTROL_PORT = 3407;
 
+static uint32_t invalid_commands_counter = 0;
+
+
 void in_loop_reporting(millis current_t) {
     static millis report_time = 0;
     EACH_N(current_t, report_time, 1, {
@@ -300,13 +304,16 @@ public:
     // NOTE: transfer parameter required by the interface, but not used in this implementation
     void handler(const FOCCommand::Type& msg, CanardRxTransfer* _) override {
     #pragma GCC diagnostic pop
-        motor->set_foc_point(FOCTarget {
+        bool is_valid = motor->set_foc_point(FOCTarget {
             .torque = msg._torque.newton_meter,
             .angle = msg.angle.radian,
             .velocity = msg.velocity.radian_per_second,
             .angle_kp = msg.angle_kp.value,
             .velocity_kp = msg.velocity_kp.value
         });
+        if (!is_valid) {
+            invalid_commands_counter += 1;
+        }
         motor->set_current_regulator_params(msg.I_kp.value, msg.I_ki.value);
     }
 };
@@ -319,32 +326,36 @@ public:
     // NOTE: transfer parameter required by the interface, but not used in this implementation
     void handler(const SpecificControl::Type& msg, CanardRxTransfer* _) override {
     #pragma GCC diagnostic pop
+        bool is_valid = false;
         switch (msg.set_point_type){
             case voltbro_foc_specific_control_1_0_VELOCITY:
-                motor->set_velocity_point(msg.set_point_value);
+                is_valid = motor->set_velocity_point(msg.set_point_value);
                 break;
             case voltbro_foc_specific_control_1_0_TORQUE:
-                motor->set_torque_point(msg.set_point_value);
+                is_valid = motor->set_torque_point(msg.set_point_value);
                 break;
             case voltbro_foc_specific_control_1_0_POSITION:
-                motor->set_angle_point(msg.set_point_value);
+                is_valid = motor->set_angle_point(msg.set_point_value);
                 break;
             case voltbro_foc_specific_control_1_0_VOLTAGE:
-                motor->set_voltage_point(msg.set_point_value);
+                is_valid = motor->set_voltage_point(msg.set_point_value);
                 break;
             default:
                 break;
+        }
+        if (!is_valid) {
+            invalid_commands_counter += 1;
         }
     }
 };
 
 // NOTE: underlying CanardRxSubscriptions are HUGE - 552 bytes each. C++ wrapper size is negligible in comparison
 ReservedObject<NodeInfoReader> node_info_reader;
-ReservedObject<RegistersHandler<1>> registers_handler;
+ReservedObject<RegistersHandler<7>> registers_handler;
 ReservedObject<FOCCommandSub> foc_command_sub;
 ReservedObject<SpecificControlSub> specific_control_sub;
 #endif
-
+static constexpr std::string TST = "1234567890ABCDE";
 void setup_subscriptions() {
     auto cyphal_interface = get_interface();
 
@@ -367,32 +378,71 @@ void setup_subscriptions() {
     );
 
     const auto node_id = get_app_config().get_node_id();
+    auto make_limit_register = [](
+        const char* name,
+        float DriveLimits::* field
+    ) -> RegisterDefinition {
+        return {
+            name,
+            [field](
+                const uavcan_register_Value_1_0& v_in,
+                uavcan_register_Value_1_0& v_out,
+                RegisterAccessResponse::Type& response
+            ) {
+                if (v_in._tag_ != REGISTER_EMPTY_TAG) {
+                    float value = 0.0f;
+                    if (parse_register_real32(v_in, value)) {
+                        DriveLimits limits = motor->get_limits();
+                        limits.*field = value;
+                        motor->set_limits(limits);
+                    }
+                }
+
+                response.persistent = false;
+                response._mutable = true;
+                fill_register_real32(v_out, motor->get_limits().*field);
+            }
+        };
+    };
+
     registers_handler.create(
-        std::array<RegisterDefinition, 1>{{
+        std::array<RegisterDefinition, 7>{{
             {
-                "motor.is_on",
+                "state.is_on",
                 [](
                     const uavcan_register_Value_1_0& v_in,
                     uavcan_register_Value_1_0& v_out,
                     RegisterAccessResponse::Type& response
                 ){
-                    static bool value = false;
-                    if (v_in._tag_ == 3) {
-                        value = v_in.bit.value.bitpacked[0] == 1;
-                    }
-                    else {
-                        // TODO: report error
+                    if (v_in._tag_ != REGISTER_EMPTY_TAG) {
+                        bool value = false;
+                        if (parse_register_bit(v_in, value)) {
+                            motor->set_state(value);
+                        }
                     }
 
-                    motor->set_state(value);
-
-                    response.persistent = true;
+                    response.persistent = false;
                     response._mutable = true;
-                    v_out._tag_ = 3;
-                    v_out.bit.value.bitpacked[0] = motor->is_on();
-                    v_out.bit.value.count = 1;
+                    fill_register_bit(v_out, motor->is_on());
                 }
-            }
+            },
+            {
+                "state.errors",
+                [](
+                    const uavcan_register_Value_1_0& v_in,
+                    uavcan_register_Value_1_0& v_out,
+                    RegisterAccessResponse::Type& response
+                ){
+                    response.persistent = false;
+                    response._mutable = false;
+                    fill_register_natural32(v_out, invalid_commands_counter);
+                }
+            },
+            make_limit_register("limit.current", &DriveLimits::user_current_limit),
+            make_limit_register("limit.torque", &DriveLimits::user_torque_limit),
+            make_limit_register("limit.speed", &DriveLimits::user_speed_limit),
+            make_limit_register("limit.min_angle", &DriveLimits::user_position_lower_limit),
+            make_limit_register("limit.max_angle", &DriveLimits::user_position_upper_limit)
         }},
         cyphal_interface
     );
