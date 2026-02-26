@@ -4,80 +4,71 @@
 >
 > [Buy here]()
 
-## UART Configuration Interface
+## UART Configuration / Test Interface
 
-The board uses a UART-based serial interface to configure parameters and control system behavior.
+The board uses a UART-based serial interface for configuration, calibration, test control, and debug logging.
 
 ### **Connection Details**
 
 * **Baud Rate**: 19200
-* **Format**: Commands are ASCII strings, terminated with `\r`, `\n`, or spaces (automatically stripped)
+* **Format**: ASCII commands; trailing `\r`, `\n`, spaces and tabs are stripped automatically
 
 ---
 
 ### **Command Syntax**
 
-* **Enter Config Mode**:
-  `START` — Enables configuration mode (motor is stopped while in config mode)
-
-* **Get Parameter**:
+* **Read parameter**:
   `<parameter_name>:?`
-  Example: `node_id:?` → `node_id:11`
+  Example: `node_id:?` -> `node_id:11`
 
-* **Set Parameter**:
+* **Write parameter**:
   `<parameter_name>:<value>`
-  Example: `kp:0.35` → `OK: kp :0.350000`
-
-* **System Commands**:
-
-  * `APPLY` — Reboots the controller to apply changes
-  * `RESET` — Resets all configuration to defaults (requires `APPLY` after)
-  * `STOP` — Exits config mode without applying changes
+  Example: `kp:0.35` -> `OK: kp :0.350000`
 
 ---
 
-### **Configuration Workflow**
+### **Mode and Command Overview**
 
-1. **Enter Config Mode**
-   Send `START` to display current settings and unlock configuration.
-
-2. **Modify Parameters**
-   Use `<param>:<value>` syntax to adjust settings.
-
-3. **Save & Apply Changes**
-
-   * Send `APPLY` to reboot and apply changes
-   * Or send `STOP` to exit config mode (changes will apply after next reboot)
-
----
-
-### **Parameters**
-
-| Parameter              | Description                                         | Type    | Example Values |
-| ---------------------- | ----------------------------------------------------| ------- | -------------- |
-| `gear_ratio`           | Gear ratio of the drive                             | Integer | `1`, `5`, `15` |
-| `max_current`          | Maximum motor current (A)                           | Float   | `5.0`, `10.5`  |
-| `max_speed`            | Maximum motor speed (rad)                           | Float   | `1000.0`       |
-| `max_torque`           | Maximum torque output (Nm)                          | Float   | `1.2`          |
-| `angle_offset`         | Motor angle offset (rad)                            | Float   | `0.0`, `15.5`  |
-| `min_angle`            | Minimum allowed angle (rad)                         | Float   | `-30.0`        |
-| `max_angle`            | Maximum allowed angle (rad)                         | Float   | `30.0`         |
-| `torque_const`         | Torque constant (Nm/A)                              | Float   | `0.12`         |
-| `kp`                   | Proportional gain (not for FOC, *specific control*) | Float   | `0.25`         |
-| `ki`                   | Integral gain (not for FOC, *specific control*).    | Float   | `0.01`         |
-| `kd`                   | Derivative gain (not for FOC, *specific control*)   | Float   | `0.005`        |
-| `filter_a`             | Main filter parameter A                             | Float   | `0.5`          |
-| `filter_g1`            | Filter gain 1                                       | Float   | `0.1`          |
-| `filter_g2`            | Filter gain 2                                       | Float   | `0.1`          |
-| `filter_g3`            | Filter gain 3                                       | Float   | `0.1`          |
-| `I_lpf_coefficient`    | Current low-pass filter coefficient                 | Float   | `0.1`          |
-| `node_id`              | Cyphal/CAN node ID                                  | Integer | `1`, `42`      |
-| `data_baud`            | FDCAN data baud rate (enum, see below)              | Enum    | `KHz1000`      |
-| `nominal_baud`         | FDCAN nominal baud rate (enum, see below)           | Enum    | `KHz500`       |
+| Command | Available State | Description |
+| ------- | --------------- | ----------- |
+| `CONFIG` | Any non-TEST state | Enter configuration mode and stop motor |
+| `SAVE` | CONFIG | Persist updated config to EEPROM (if changed), exit config mode, start motor |
+| `RESET` | CONFIG | Load default config values in RAM (does NOT affect current session - requires `SAVE` or `APPLY` to persist) |
+| `APPLY` | Any non-TEST state | Persist updated config (if changed) and reboot |
+| `CALIBRATE` | RUNNING, NOT_CALIBRATED | Run calibration action |
+| `TEST` | RUNNING | Enter test mode |
+| `STOP` | TEST | Exit test mode, clear FOC target, stop test logging |
 
 ---
 
-### FDCAN Baud Rate Configuration
+### **Configuration Parameters**
+
+| Parameter      | Description                                         | Type    | Example Values |
+| -------------- | --------------------------------------------------- | ------- | -------------- |
+| `gear_ratio`   | Gear ratio of the drive                             | Integer | `1`, `5`, `15` |
+| `max_current`  | Maximum motor current (A)                           | Float   | `5.0`, `10.5`  |
+| `max_speed`    | Maximum motor speed (rad)                           | Float   | `1000.0`       |
+| `max_torque`   | Maximum torque output (Nm)                          | Float   | `1.2`          |
+| `angle_offset` | Motor angle offset (rad)                            | Float   | `0.0`, `15.5`  |
+| `min_angle`    | Minimum allowed angle (rad)                         | Float   | `-30.0`        |
+| `max_angle`    | Maximum allowed angle (rad)                         | Float   | `30.0`         |
+| `torque_const` | Torque constant (Nm/A)                              | Float   | `0.12`         |
+| `kp`           | Current proportional gain                           | Float   | `0.25`         |
+| `ki`           | Current integral gain                               | Float   | `0.01`         |
+| `kd`           | Current derivative gain                             | Float   | `0.005`        |
+| `filter_a`     | Main filter parameter A                             | Float   | `0.5`          |
+| `filter_g1`    | Filter gain 1                                       | Float   | `0.1`          |
+| `filter_g2`    | Filter gain 2                                       | Float   | `0.1`          |
+| `filter_g3`    | Filter gain 3                                       | Float   | `0.1`          |
+| `I_lpf`        | Current low-pass filter coefficient                 | Float   | `0.1`          |
+| `angle_encoder`| Angle encoder type enum, 0 rotor, 1 - shaft         | Integer | `0`, `1`.      |
+| `node_id`      | Cyphal/CAN node ID                                  | Integer | `1`, `42`      |
+| `data_baud`    | FDCAN data baud rate enum (see below)               | Enum    | `0`, `1`, `2`  |
+| `nominal_baud` | FDCAN nominal baud rate enum (see below)            | Enum    | `3`, `4`       |
+
+---
+
+### **FDCAN Baud Rate Configuration**
 
 | parameter           | Value Name | Speed    | Numeric Value |
 |---------------------|------------|----------|---------------|
@@ -94,41 +85,62 @@ The board uses a UART-based serial interface to configure parameters and control
 
 ---
 
-### **System Commands**
+### **TEST Mode Commands**
 
-| Command | Description                                             |
-| ------- | ------------------------------------------------------- |
-| `START` | Enter config mode, motor stopped                        |
-| `APPLY` | Reboot and apply changes                                |
-| `RESET` | Reset config to defaults (needs `APPLY` to take effect) |
-| `STOP`  | Exit config mode without applying changes               |
+| Command | Description |
+| ------- | ----------- |
+| `do.velocity:<value>` | Set velocity target for FOC test controller |
+| `do.angle:<value>` | Set angle target for FOC test controller |
+| `do.free` | Zero target (no effort mode) |
+| `min_angle:<value or ?>` | Read/write lower position limit during test |
+| `max_angle:<value or ?>` | Read/write upper position limit during test |
+| `angle_offset:<value or ?>` | Read/write angle offset during test |
+| `log.start` | Start UART test logging |
+| `log.stop` | Stop UART test logging |
+| `STOP` | Exit test mode |
+
+When logging is enabled in TEST mode, UART periodically prints:
+
+* `rotor sensor: <u16>`
+* `shaft sensor: <u16>`
+* `shaft angle : <float>`
 
 ---
 
 ### **Response Format**
 
-* **Success**: `OK: <param> :<value>` (for set operations).
-* **Error**: `ERROR: <reason>` (e.g., `ERROR: Invalid value`).
-* **Auto-Save**: Changes are saved to EEPROM automatically after valid `SET` commands
+* **Success**: `OK: <param>:<value>` or `OK: <param> :<value>` (set operations)
+* **Error**: `ERROR: Unknown command`, `ERROR: Unknown parameter`, `ERROR: Invalid value`
+* **Config persistence**: Settings are written to EEPROM on `SAVE`/`APPLY` (not on every `SET`)
 
 ---
 
-### **Example Session**
+### **Example Sessions**
 
 ```bash
-# Enter config mode
-> START
+# Configuration flow
+> CONFIG
 CONFIG MODE ENABLED
-gear_ratio:5
-max_current:10.500000
-...
-
-# Set max speed
-> max_speed:1200
-OK: max_speed :1200.000000
-
-# Apply changes
+> node_id:11
+OK: node_id:11
+> gear_ratio:36
+OK: gear_ratio:36
+> SAVE
+Saved config
+NOTE: config changes not applied! To apply, run APPLY or reset controller
 > APPLY
+```
+
+```bash
+# Test flow
+> TEST
+Entering TEST mode
+> do.velocity:5
+Set velocity: <5.000000>
+> log.start
+# periodic sensor logs...
+> STOP
+Stopping TEST mode
 ```
 
 ## FDCAN Cyphal Runtime Interface
