@@ -165,6 +165,7 @@ void create_motor(VBDriveConfig& config_data) {
             .user_speed_limit = value_or_default(config_data.max_speed, NAN),
             .user_position_lower_limit = value_or_default(config_data.min_angle, NAN),
             .user_position_upper_limit = value_or_default(config_data.max_angle, NAN),
+            .user_angle_offset = value_or_default(config_data.angle_offset, 0.0f)
         },
         // Built-in constant parameters
         DriveInfo {
@@ -182,14 +183,14 @@ void create_motor(VBDriveConfig& config_data) {
                     config_data.gear_ratio,
                     static_cast<uint8_t>(36),
                     static_cast<uint8_t>(0)
-                ),
-                .user_angle_offset = value_or_default(config_data.angle_offset, 0.0f)
+                )
             }
         },
         &htim1,
         motor_encoder,
         motor_inverter,
-        inductive_sensor
+        inductive_sensor,
+        config_data.angle_encoder
     );
     HAL_Delay(100);
     motor->init();
@@ -274,18 +275,27 @@ void app() {
     #ifdef FOC_PROFILE
     static millis stack_measurement_time = 0;
     #endif
+    static millis logging_time = 0;
 
     while(true) {
         if (app_manager.is_app_running()) {
             cyphal_loop();
         }
 
-        #ifdef FOC_PROFILE
         millis current_time = millis_32();
+        #ifdef FOC_PROFILE
         EACH_N(current_time, stack_measurement_time, 100, {
             measure_stack_usage();
         })
         #endif
+
+        EACH_N(current_time, logging_time, 100, {
+            if (app_manager.is_logging()) {
+                app_manager.send_message_blocking("rotor sensor: %u\r\n", motor->get_rotor_encoder_value());
+                app_manager.send_message_blocking("shaft sensor: %u\r\n", motor->get_shaft_encoder_value());
+                app_manager.send_message_blocking("shaft angle : %f\r\n", motor->get_angle());
+            }
+        })
     }
 }
 

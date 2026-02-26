@@ -63,7 +63,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t size) {
     auto command_string = std::string(uart_rx_buffer);
 
     drive_state_controller.process_command(command_string);
-
+    drive_state_controller.wait_for_uart();
     start_uart_recv_it();
 }
 
@@ -113,6 +113,7 @@ static constexpr std::string FILTER_G1_PARAM = "filter_g1";
 static constexpr std::string FILTER_G2_PARAM = "filter_g2";
 static constexpr std::string FILTER_G3_PARAM = "filter_g3";
 static constexpr std::string FILTER_I_LPF_PARAM = "I_lpf";
+static constexpr std::string ANGLE_ENCODER_PARAM = "angle_encoder";
 
 void VBDriveConfig::print_self(UARTResponseAccumulator& responses) {
     get(GEAR_RATIO_PARAM, responses);
@@ -134,6 +135,7 @@ void VBDriveConfig::print_self(UARTResponseAccumulator& responses) {
     get(NODE_ID_PARAM, responses);
     get(FDCAN_DATA_PARAM, responses);
     get(FDCAN_NOMINAL_PARAM, responses);
+    get(ANGLE_ENCODER_PARAM, responses);
     responses.append("was configured:%s\n\r", was_configured ? "true" : "false");
     responses.append("are all required params set: %s\n\r", are_required_params_set() ? "true" : "false");
 }
@@ -173,7 +175,7 @@ bool VBDriveConfig::set(const std::string& param, std::string& value, UARTRespon
     int new_int_value = 0;
     float new_float_value = 0;
     bool is_converted = false;
-    if (param == GEAR_RATIO_PARAM) {
+    if (param == GEAR_RATIO_PARAM || param == ANGLE_ENCODER_PARAM) {
         is_converted = safe_stoi(value, new_int_value);
     } else {
         is_converted = safe_stof(value, new_float_value);
@@ -186,6 +188,10 @@ bool VBDriveConfig::set(const std::string& param, std::string& value, UARTRespon
     if (param == GEAR_RATIO_PARAM) {
         gear_ratio = static_cast<uint8_t>(new_int_value);
         responses.append("OK: gear_ratio:%d\n\r", static_cast<int>(gear_ratio));
+    }
+    else if (param == ANGLE_ENCODER_PARAM) {
+        angle_encoder = static_cast<AngleEncoderType>(new_int_value);
+        responses.append("OK: angle_encoder:%u\n\r", to_underlying(angle_encoder));
     }
     CHECK_AND_SET_PARAM_FLOAT(max_current, MAX_CURRENT_PARAM)
     CHECK_AND_SET_PARAM_FLOAT(max_speed, MAX_SPEED_PARAM)

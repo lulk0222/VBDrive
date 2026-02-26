@@ -6,7 +6,7 @@
 VBDrive* get_motor();
 
 struct __attribute__((packed)) VBDriveConfig: public BaseConfigData {
-    static constexpr uint32_t TYPE_ID = 0x44CCCBBB;
+    static constexpr uint32_t TYPE_ID = 0x44AAABBB;
     uint8_t gear_ratio = 0;
     // NAN means not set
     float max_voltage = NAN;
@@ -25,9 +25,11 @@ struct __attribute__((packed)) VBDriveConfig: public BaseConfigData {
     float filter_g2 = NAN;
     float filter_g3 = NAN;
     float I_lpf_coefficient = NAN;
+    AngleEncoderType angle_encoder = AngleEncoderType::ROTOR;
 
     VBDriveConfig(): BaseConfigData() {
         type_id = VBDriveConfig::TYPE_ID;
+        angle_encoder = AngleEncoderType::ROTOR;
     }
 
     bool are_required_params_set() override;
@@ -54,6 +56,9 @@ protected:
     static constexpr std::string_view STOP_COMMAND = "STOP";
     static constexpr std::string_view VEL_PARAM = "do.velocity";
     static constexpr std::string_view ANGLE_PARAM = "do.angle";
+    static constexpr std::string_view FREE_COMMAND = "do.free";
+    static constexpr std::string_view START_LOGGING_COMMAND = "log.start";
+    static constexpr std::string_view STOP_LOGGING_COMMAND = "log.stop";
 
     const std::array<std::string_view, 3> editable_in_test_mode = {
         "min_angle",
@@ -61,17 +66,32 @@ protected:
         "angle_offset"
     };
 
+    bool _is_logging = false;
+
 public:
     using BaseConfigurator = AppConfigurator<CommandState, VBDriveConfig, CONFIG_PLACEMENT>;  // for brevity
     using BaseConfigurator::AppConfigurator;  // inherit constructors
-    // inherit base methods
-    using BaseConfigurator::process_command;
-    using BaseConfigurator::process_parameter;
-    using BaseConfigurator::split_parameter;
+    using BaseConfigurator::process_command;  // inherit base method
 
-    void send_message_blocking(char* message, uint32_t timeout = 1000) {
-        while (HAL_UART_GetState(huart) == HAL_UART_STATE_BUSY) {}
-        HAL_UART_Transmit(huart, reinterpret_cast<uint8_t*>(message), strlen(message), timeout);
+    bool is_logging() {
+        return BaseConfigurator::app_state == CommandState::TESTING && _is_logging;
+    }
+
+    void send_message_blocking(const char* fmt, ...) {
+        size_t buffer_size = strlen(fmt) + 15;  // should be enough for param expansion
+        char buffer[buffer_size];
+
+        va_list args;
+        va_start(args, fmt);
+        int written = npf_vsnprintf(buffer, buffer_size, fmt, args);
+        va_end(args);
+
+        if (written == 0) {
+            return;
+        }
+
+        wait_for_uart();
+        HAL_UART_Transmit(huart, reinterpret_cast<uint8_t*>(buffer), written, 1000);
     }
 
     void set_calibration_finished() {
@@ -110,10 +130,22 @@ public:
             responses.append("Stopping TEST mode\n\r");
             motor->set_foc_point(FOCTarget{0});
             app_state = CommandState::RUNNING;
+            _is_logging = false;
+        }
+        else if (command == START_LOGGING_COMMAND) {
+            _is_logging = true;
+        }
+        else if (command == STOP_LOGGING_COMMAND) {
+            _is_logging = false;
+        }
+        else if (command == FREE_COMMAND) {
+            motor->set_foc_point(FOCTarget{0});
+            responses.append("No effort mode\r\n");
         }
         else {
-            auto values = split_parameter(command, responses);
+            auto values = split_parameter(command);
             if (!values) {
+                responses.append("ERROR: Unknown command\n\r");
                 return;
             }
             auto& [param, value] = *values;
@@ -144,7 +176,18 @@ public:
                 responses.append("Set angle: <%f>\n\r", setpoint);
             }
             else {
-                BaseConfigurator::process_parameter(command, responses, editable_in_test_mode);
+                bool is_processed = process_parameter(command, responses);
+                if (!is_processed) {
+                    responses.append("ERROR: Unknown command\n\r");
+                }
+                else {
+                    // Apply limits dynamically in this session
+                    auto new_limits = motor->get_limits();
+                    new_limits.user_angle_offset = config_data.angle_offset;
+                    new_limits.user_position_lower_limit = config_data.min_angle;
+                    new_limits.user_position_upper_limit = config_data.max_angle;
+                    motor->set_limits(new_limits);
+                }
             }
         }
     }
