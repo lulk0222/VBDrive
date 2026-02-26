@@ -5,6 +5,21 @@
 
 VBDrive* get_motor();
 
+namespace VBDriveDefaults {
+    inline constexpr float MAX_VOLTAGE = 50.0f;
+    inline constexpr uint8_t GEAR_RATIO = 36;
+    inline constexpr float TORQUE_CONST = 1.0f;
+    inline constexpr float ANGLE_OFFSET = 0.0f;
+    inline constexpr float PID_KP = 4.0f;
+    inline constexpr float PID_KI = 1600.0f;
+    inline constexpr float PID_KD = 0.0f;
+    inline constexpr float FILTER_A = 0.0f;
+    inline constexpr float FILTER_G1 = 0.015700989410003974f;
+    inline constexpr float FILTER_G2 = 3.925227776360174f;
+    inline constexpr float FILTER_G3 = 387.54711795263574f;
+    inline constexpr float I_LPF = 0.0925f;
+}  // namespace VBDriveDefaults
+
 struct __attribute__((packed)) VBDriveConfig: public BaseConfigData {
     static constexpr uint32_t TYPE_ID = 0x44AAABBB;
     uint8_t gear_ratio = 0;

@@ -144,22 +144,57 @@ void VBDriveConfig::get(const std::string& param, UARTResponseAccumulator& respo
     if (get_base_params(this, param, responses)) {
         return;
     }
-    CHECK_AND_PRINT_PARAM_ANY(gear_ratio, GEAR_RATIO_PARAM, %zu)
-    CHECK_AND_PRINT_PARAM_FLOAT(max_current, MAX_CURRENT_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(max_speed, MAX_SPEED_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(max_torque, MAX_TORQUE_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(angle_offset, ANGLE_OFFSET_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(min_angle, MIN_ANGLE_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(max_angle, MAX_ANGLE_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(torque_const, TORQUE_CONST_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(ki, KI_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(kp, KP_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(kd, KD_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(filter_a, FILTER_A_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(filter_g1, FILTER_G1_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(filter_g2, FILTER_G2_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(filter_g3, FILTER_G3_PARAM)
-    CHECK_AND_PRINT_PARAM_FLOAT(I_lpf_coefficient, FILTER_I_LPF_PARAM)
+    if (param == GEAR_RATIO_PARAM) {
+        responses.append("gear_ratio:%u\n\r", value_or_default(gear_ratio, VBDriveDefaults::GEAR_RATIO, static_cast<uint8_t>(0)));
+    }
+    else if (param == MAX_CURRENT_PARAM) {
+        responses.append("max_current:%f\n\r", value_or_default(max_current, NAN));
+    }
+    else if (param == MAX_SPEED_PARAM) {
+        responses.append("max_speed:%f\n\r", value_or_default(max_speed, NAN));
+    }
+    else if (param == MAX_TORQUE_PARAM) {
+        responses.append("max_torque:%f\n\r", value_or_default(max_torque, NAN));
+    }
+    else if (param == ANGLE_OFFSET_PARAM) {
+        responses.append("angle_offset:%f\n\r", value_or_default(angle_offset, VBDriveDefaults::ANGLE_OFFSET));
+    }
+    else if (param == MIN_ANGLE_PARAM) {
+        responses.append("min_angle:%f\n\r", value_or_default(min_angle, NAN));
+    }
+    else if (param == MAX_ANGLE_PARAM) {
+        responses.append("max_angle:%f\n\r", value_or_default(max_angle, NAN));
+    }
+    else if (param == TORQUE_CONST_PARAM) {
+        responses.append("torque_const:%f\n\r", value_or_default(torque_const, VBDriveDefaults::TORQUE_CONST));
+    }
+    else if (param == KI_PARAM) {
+        responses.append("ki:%f\n\r", value_or_default(ki, VBDriveDefaults::PID_KI));
+    }
+    else if (param == KP_PARAM) {
+        responses.append("kp:%f\n\r", value_or_default(kp, VBDriveDefaults::PID_KP));
+    }
+    else if (param == KD_PARAM) {
+        responses.append("kd:%f\n\r", value_or_default(kd, VBDriveDefaults::PID_KD));
+    }
+    else if (param == FILTER_A_PARAM) {
+        responses.append("filter_a:%f\n\r", value_or_default(filter_a, VBDriveDefaults::FILTER_A));
+    }
+    else if (param == FILTER_G1_PARAM) {
+        responses.append("filter_g1:%f\n\r", value_or_default(filter_g1, VBDriveDefaults::FILTER_G1));
+    }
+    else if (param == FILTER_G2_PARAM) {
+        responses.append("filter_g2:%f\n\r", value_or_default(filter_g2, VBDriveDefaults::FILTER_G2));
+    }
+    else if (param == FILTER_G3_PARAM) {
+        responses.append("filter_g3:%f\n\r", value_or_default(filter_g2, VBDriveDefaults::FILTER_G3));
+    }
+    else if (param == FILTER_I_LPF_PARAM) {
+        responses.append("I_lpf:%f\n\r", value_or_default(I_lpf_coefficient, VBDriveDefaults::I_LPF));
+    }
+    else if (param == ANGLE_ENCODER_PARAM) {
+        responses.append("angle_encoder:%u\n\r", to_underlying(angle_encoder));
+    }
     else {
         responses.append("ERROR: Unknown parameter\n\r");
     }

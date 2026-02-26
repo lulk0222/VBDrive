@@ -122,41 +122,35 @@ VBDrive* get_motor() {
 }
 
 void create_motor(VBDriveConfig& config_data) {
-    // hardware limit is 50V, 30A (?)
-    constexpr float MAX_VOLTAGE = 50.0f;
-
-    constexpr float DEFAULT_I_KP = 4.0;
-    constexpr float DEFAULT_I_KI = 1600.0;
-
     motor = new (&motor_storage) VBDrive(
         0.000025f,
         // Kalman filter for determining electric angle
         FiltersConfig {
-            .expected_a = value_or_default(config_data.filter_a, 0.0f),
-            .g1 = value_or_default(config_data.filter_g1, 0.015700989410003974f),
-            .g2 = value_or_default(config_data.filter_g2, 3.925227776360174f),
-            .g3 = value_or_default(config_data.filter_g2, 387.54711795263574f),
-            .I_lpf_coefficient = value_or_default(config_data.I_lpf_coefficient, 0.0925f)
+            .expected_a = value_or_default(config_data.filter_a, VBDriveDefaults::FILTER_A),
+            .g1 = value_or_default(config_data.filter_g1, VBDriveDefaults::FILTER_G1),
+            .g2 = value_or_default(config_data.filter_g2, VBDriveDefaults::FILTER_G2),
+            .g3 = value_or_default(config_data.filter_g2, VBDriveDefaults::FILTER_G3),
+            .I_lpf_coefficient = value_or_default(config_data.I_lpf_coefficient, VBDriveDefaults::I_LPF)
         },
         // Q Regulator
         PIDConfig {
             .multiplier = 1.0f,
-            .kp = value_or_default(config_data.kp, DEFAULT_I_KP),
-            .ki = value_or_default(config_data.ki, DEFAULT_I_KI),
-            .kd = value_or_default(config_data.kd, 0.0f),
-            .integral_error_lim = MAX_VOLTAGE,
-            .max_output = MAX_VOLTAGE,
-            .min_output = -MAX_VOLTAGE,
+            .kp = value_or_default(config_data.kp, VBDriveDefaults::PID_KP),
+            .ki = value_or_default(config_data.ki, VBDriveDefaults::PID_KI),
+            .kd = value_or_default(config_data.kd, VBDriveDefaults::PID_KD),
+            .integral_error_lim = VBDriveDefaults::MAX_VOLTAGE,
+            .max_output = VBDriveDefaults::MAX_VOLTAGE,
+            .min_output = -VBDriveDefaults::MAX_VOLTAGE,
         },
         // D Regulator
         PIDConfig {
             .multiplier = 1.0f,
-            .kp = value_or_default(config_data.kp, DEFAULT_I_KP),
-            .ki = value_or_default(config_data.ki, DEFAULT_I_KI),
-            .kd = value_or_default(config_data.kd, 0.0f),
-            .integral_error_lim = MAX_VOLTAGE,
-            .max_output = MAX_VOLTAGE,
-            .min_output = -MAX_VOLTAGE,
+            .kp = value_or_default(config_data.kp, VBDriveDefaults::PID_KP),
+            .ki = value_or_default(config_data.ki, VBDriveDefaults::PID_KI),
+            .kd = value_or_default(config_data.kd, VBDriveDefaults::PID_KD),
+            .integral_error_lim = VBDriveDefaults::MAX_VOLTAGE,
+            .max_output = VBDriveDefaults::MAX_VOLTAGE,
+            .min_output = -VBDriveDefaults::MAX_VOLTAGE,
         },
         // User-defined limits
         DriveLimits {
@@ -165,11 +159,11 @@ void create_motor(VBDriveConfig& config_data) {
             .user_speed_limit = value_or_default(config_data.max_speed, NAN),
             .user_position_lower_limit = value_or_default(config_data.min_angle, NAN),
             .user_position_upper_limit = value_or_default(config_data.max_angle, NAN),
-            .user_angle_offset = value_or_default(config_data.angle_offset, 0.0f)
+            .user_angle_offset = value_or_default(config_data.angle_offset, VBDriveDefaults::ANGLE_OFFSET)
         },
         // Built-in constant parameters
         DriveInfo {
-            .torque_const = value_or_default(config_data.torque_const, 1.0f),
+            .torque_const = value_or_default(config_data.torque_const, VBDriveDefaults::TORQUE_CONST),
             .max_current = 30.0,
             .max_torque = 100.0f,
             .stall_current = 6.0f,
@@ -181,7 +175,7 @@ void create_motor(VBDriveConfig& config_data) {
                 .ppairs = 14,
                 .gear_ratio = value_or_default(
                     config_data.gear_ratio,
-                    static_cast<uint8_t>(36),
+                    VBDriveDefaults::GEAR_RATIO,
                     static_cast<uint8_t>(0)
                 )
             }
