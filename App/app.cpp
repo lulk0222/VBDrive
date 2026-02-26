@@ -216,6 +216,7 @@ void app() {
     eeprom.wait_until_available();
     auto& app_config = get_app_config();
     app_config.init();
+    start_uart_recv_it();
     auto& config_data = app_config.get_config();
 
     if (!app_config.is_app_running()) {

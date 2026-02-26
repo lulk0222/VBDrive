@@ -90,3 +90,6 @@ template <typename T>
 inline T value_or_default(T value, T default_value, T not_set_value) {
     return (value == not_set_value) ? default_value : value;
 }
+
+//command_mode.cpp
+void start_uart_recv_it();

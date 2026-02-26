@@ -49,10 +49,6 @@ void configure_fdcan(FDCAN_HandleTypeDef* hfdcan) {
     }
 }
 
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t size) {
-    app_configurator.handle_uart_event(huart, size);
-}
-
 bool VBDriveConfig::are_required_params_set() {
     return BaseConfigData::are_required_params_set() && gear_ratio != 0;
 }
