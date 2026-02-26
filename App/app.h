@@ -6,43 +6,13 @@
 #include <cyphal/cyphal.h>
 #include <voltbro/utils.hpp>
 #include <voltbro/motors/bldc/vbdrive/vbdrive.hpp>
-#include <voltbro/config/serial/serial.h>
 
-struct __attribute__((packed)) VBDriveConfig: public BaseConfigData {
-    static constexpr uint32_t TYPE_ID = 0x44CCCBBB;
-    uint8_t gear_ratio = 0;
-    // NAN means not set
-    float max_voltage = NAN;
-    float max_current = NAN;
-    float max_torque = NAN;
-    float max_speed = NAN;
-    float angle_offset = NAN;
-    float min_angle = NAN;
-    float max_angle = NAN;
-    float torque_const = NAN;
-    float kp = NAN;
-    float ki = NAN;
-    float kd = NAN;
-    float filter_a = NAN;
-    float filter_g1 = NAN;
-    float filter_g2 = NAN;
-    float filter_g3 = NAN;
-    float I_lpf_coefficient = NAN;
+#include "state_manager.hpp"
 
-    VBDriveConfig(): BaseConfigData() {
-        type_id = VBDriveConfig::TYPE_ID;
-    }
-
-    bool are_required_params_set() override;
-
-    void print_self(UARTResponseAccumulator& responses);
-    void get(const std::string& param, UARTResponseAccumulator& responses);
-    bool set(const std::string& param, std::string& value, UARTResponseAccumulator& responses);
-};
-
-constexpr size_t CALIBRATION_PLACEMENT = 0;
-constexpr size_t CONFIG_PLACEMENT = CALIBRATION_PLACEMENT + sizeof(CalibrationData) + 1;
-constexpr size_t IND_SENSOR_STATE_PLACEMENT = CONFIG_PLACEMENT + sizeof(VBDriveConfig) + 1;
+// state_manager.hpp
+// CALIBRATION_PLACEMENT
+// CONFIG_PLACEMENT
+// IND_SENSOR_STATE_PLACEMENT
 
 // communications.cpp
 inline constexpr size_t CYPHAL_QUEUE_SIZE = 50;
@@ -72,13 +42,15 @@ void start_timers();
 // app.cpp
 VBDrive* get_motor();
 EEPROM& get_eeprom();
+// actions (in app.cpp)
+bool is_able_to_calibrate();
+bool do_calibrate();
 
 //fdcan.cpp
 extern FDCAN_HandleTypeDef hfdcan1;
 
-// config.cpp
-using AppConfigT = AppConfigurator<VBDriveConfig, CONFIG_PLACEMENT>;
-AppConfigT& get_app_config();
+// state_manager.cpp
+DriveStateController& get_app_manager();
 void configure_fdcan(FDCAN_HandleTypeDef*);
 
 template <typename T>

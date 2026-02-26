@@ -48,7 +48,7 @@ volatile uint32_t value_invocations = 0;
 #endif
 
 __attribute__((hot, flatten)) void main_callback() {
-    auto& app_config = get_app_config();
+    auto& app_manager = get_app_manager();
 
     #ifdef ENABLE_DT
     // it can never start at 0t, so 0 is "not set" value
@@ -73,7 +73,7 @@ __attribute__((hot, flatten)) void main_callback() {
     last_call = now;
     #endif
 
-    if (app_config.is_app_running()) {
+    if (app_manager.is_app_running()) {
         if (auto motor = get_motor()) {
             motor->update();
         }

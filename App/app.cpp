@@ -34,6 +34,7 @@
 #include <voltbro/utils.hpp>
 //#pragma endregion
 
+//#pragma region ExternConfiguration
 #define NANOPRINTF_IMPLEMENTATION
 #define NANOPRINTF_USE_FIELD_WIDTH_FORMAT_SPECIFIERS 1
 #define NANOPRINTF_USE_PRECISION_FORMAT_SPECIFIERS   1
@@ -47,6 +48,7 @@ extern "C" {
     // During setup we need tiny heap for shared_ptr of CyphalInterface for API compatibility reasons
     bool global_allocation_lock = false;
 }
+//#pragma endregion
 
 #ifdef FOC_PROFILE
 extern uint32_t __StackLimit;
@@ -193,16 +195,42 @@ void create_motor(VBDriveConfig& config_data) {
     motor->init();
 }
 
+bool is_able_to_calibrate() {
+    auto& app_manager = get_app_manager();
+    auto state = app_manager.get_state();
+    return (
+        state == CommandState::NOT_CALIBRATED ||
+        state == CommandState::RUNNING
+    );
+}
+
+bool do_calibrate() {
+    // Stop all control
+    motor->set_foc_point(FOCTarget{0});
+    auto& app_manager = get_app_manager();
+    app_manager.set_state(CommandState::NOT_CALIBRATED);
+
+    calibration_data.reset();
+    // NOTE: see app.h lines 20-21 for details on cyphal_queue_buffer_shared
+    motor->calibrate(calibration_data, cyphal_queue_buffer_shared, SHARED_BUFFER_SIZE);
+    calibration_data.was_calibrated = true;
+    HAL_IMPORTANT(eeprom.write<CalibrationData>(&calibration_data, CALIBRATION_PLACEMENT))
+    motor->apply_calibration(calibration_data);
+
+    app_manager.set_state(CommandState::RUNNING);
+    return true;
+}
+
 void apply_calibration() {
     if (calibration_data.type_id == 0) {  // uninitialized, try to read from EEPROM
         HAL_IMPORTANT(eeprom.read<CalibrationData>(&calibration_data, CALIBRATION_PLACEMENT))
     }
     if (calibration_data.type_id != CalibrationData::TYPE_ID || !calibration_data.was_calibrated) {
-        calibration_data.reset();
-        // NOTE: see app.h lines 51-53 for details on cyphal_queue_buffer_shared
-        motor->calibrate(calibration_data, cyphal_queue_buffer_shared, SHARED_BUFFER_SIZE);
-        calibration_data.was_calibrated = true;
-        HAL_IMPORTANT(eeprom.write<CalibrationData>(&calibration_data, CALIBRATION_PLACEMENT))
+        auto& app_manager = get_app_manager();
+        char warning_message[] = "Motor is not calibrated! Movement forbidden\n\r\0";
+        app_manager.send_message_blocking(warning_message);
+        app_manager.set_state(CommandState::NOT_CALIBRATED);
+        return;
     }
     motor->apply_calibration(calibration_data);
 }
@@ -214,13 +242,13 @@ void app() {
 //#pragma region StartupConfiguration
     start_timers();
     eeprom.wait_until_available();
-    auto& app_config = get_app_config();
-    app_config.init();
+    auto& app_manager = get_app_manager();
+    app_manager.init();
     start_uart_recv_it();
-    auto& config_data = app_config.get_config();
+    auto& config_data = app_manager.get_config();
 
-    if (!app_config.is_app_running()) {
-        // Hold here until configured and rebooted (in interrupt handler in config.cpp)
+    if (!app_manager.is_app_running()) {
+        // Hold here until configured and REBOOTED (by APPLY command)
         while (true) {}
     }
 
@@ -229,6 +257,10 @@ void app() {
     motor->start();
     apply_calibration();
     motor->set_foc_point(FOCTarget{0});
+
+    while (!app_manager.is_app_running()) {
+        // Hold here until calibrated
+    }
 
     start_cyphal();
     set_cyphal_mode(uavcan_node_Mode_1_0_OPERATIONAL);
@@ -244,7 +276,9 @@ void app() {
     #endif
 
     while(true) {
-        cyphal_loop();
+        if (app_manager.is_app_running()) {
+            cyphal_loop();
+        }
 
         #ifdef FOC_PROFILE
         millis current_time = millis_32();
@@ -378,7 +412,7 @@ void setup_subscriptions() {
         FDCAN_REJECT_REMOTE
     );
 
-    const auto node_id = get_app_config().get_node_id();
+    const auto node_id = get_app_manager().get_node_id();
     auto make_limit_register = [](
         const char* name,
         float DriveLimits::* field

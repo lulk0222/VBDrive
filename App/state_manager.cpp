@@ -2,7 +2,14 @@
 
 #include "usart.h"
 
-AppConfigT app_configurator(
+constexpr auto make_action(auto f1, auto f2) {
+    return std::make_tuple(
+        std::function<bool()>(f1),
+        std::function<bool()>(f2)
+    );
+}
+
+DriveStateController drive_state_controller(
     &huart2,
     get_eeprom(),
     []() {
@@ -16,11 +23,48 @@ AppConfigT app_configurator(
         if (motor) {
             motor->stop();
         }
+    },
+    DriveStateController::ActionsMap{
+        { "CALIBRATE", make_action(is_able_to_calibrate, do_calibrate)}
     }
 );
 
-AppConfigT& get_app_config() {
-    return app_configurator;
+DriveStateController& get_app_manager() {
+    return drive_state_controller;
+}
+
+static constexpr uint16_t UART_RX_BUFFER_SIZE = 32;
+static char uart_rx_buffer[UART_RX_BUFFER_SIZE + 1];
+
+void start_uart_recv_it() {
+    std::memset(uart_rx_buffer, '\0', UART_RX_BUFFER_SIZE + 1);
+    /*
+    / If TX uses DMA, next line is not needed,
+    / if TX is IT or direct, next line is required due to bug in HAL.
+    / Kept here so I don't forget
+    HAL_UART_Abort_IT(&huart2);
+    */
+    auto status = HAL_UARTEx_ReceiveToIdle_DMA(
+        &huart2,
+        reinterpret_cast<uint8_t*>(uart_rx_buffer),
+        UART_RX_BUFFER_SIZE
+    );
+    if (status != HAL_OK) {
+        // TODO
+    }
+}
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+// NOTE: huart parameter required by the interface, but not used in this implementation
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t size) {
+#pragma GCC diagnostic pop
+    uart_rx_buffer[size] = '\0';
+    auto command_string = std::string(uart_rx_buffer);
+
+    drive_state_controller.process_command(command_string);
+
+    start_uart_recv_it();
 }
 
 void configure_fdcan(FDCAN_HandleTypeDef* hfdcan) {
@@ -41,8 +85,8 @@ void configure_fdcan(FDCAN_HandleTypeDef* hfdcan) {
     hfdcan->Init.ExtFiltersNbr = 4;
     hfdcan->Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
 
-    hfdcan->Init.NominalPrescaler = app_configurator.get_nom_prescaler();
-    hfdcan->Init.DataPrescaler = app_configurator.get_data_prescaler();
+    hfdcan->Init.NominalPrescaler = drive_state_controller.get_nom_prescaler();
+    hfdcan->Init.DataPrescaler = drive_state_controller.get_data_prescaler();
 
     if (HAL_FDCAN_Init(hfdcan) != HAL_OK) {
         Error_Handler();
@@ -98,7 +142,7 @@ void VBDriveConfig::get(const std::string& param, UARTResponseAccumulator& respo
     if (get_base_params(this, param, responses)) {
         return;
     }
-    CHECK_AND_PRINT_PARAM_INT(static_cast<int>(gear_ratio), GEAR_RATIO_PARAM)
+    CHECK_AND_PRINT_PARAM_ANY(gear_ratio, GEAR_RATIO_PARAM, %zu)
     CHECK_AND_PRINT_PARAM_FLOAT(max_current, MAX_CURRENT_PARAM)
     CHECK_AND_PRINT_PARAM_FLOAT(max_speed, MAX_SPEED_PARAM)
     CHECK_AND_PRINT_PARAM_FLOAT(max_torque, MAX_TORQUE_PARAM)
@@ -141,7 +185,7 @@ bool VBDriveConfig::set(const std::string& param, std::string& value, UARTRespon
 
     if (param == GEAR_RATIO_PARAM) {
         gear_ratio = static_cast<uint8_t>(new_int_value);
-        responses.append("OK: gear_ration :%d\n\r", static_cast<int>(gear_ratio));
+        responses.append("OK: gear_ratio:%d\n\r", static_cast<int>(gear_ratio));
     }
     CHECK_AND_SET_PARAM_FLOAT(max_current, MAX_CURRENT_PARAM)
     CHECK_AND_SET_PARAM_FLOAT(max_speed, MAX_SPEED_PARAM)
