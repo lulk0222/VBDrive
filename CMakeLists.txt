@@ -58,7 +58,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     -DUSE_HAL_DRIVER
-    -DSTM32_G
+    -DSTM32G4
     -DARM_MATH_CM4
 )
 

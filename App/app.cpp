@@ -285,9 +285,13 @@ void app() {
 
         EACH_N(current_time, logging_time, 100, {
             if (app_manager.is_logging()) {
-                app_manager.send_message_blocking("rotor sensor: %u\r\n", motor->get_rotor_encoder_value());
-                app_manager.send_message_blocking("shaft sensor: %u\r\n", motor->get_shaft_encoder_value());
-                app_manager.send_message_blocking("shaft angle : %f\r\n", motor->get_angle());
+                app_manager.send_message_blocking(
+                    "rotor: %6u shaft :%6u angle: %6.2f velocity: %6.2f\r\n",
+                    motor->get_rotor_encoder_value(),
+                    motor->get_shaft_encoder_value(),
+                    motor->get_angle(),
+                    motor->get_velocity()
+                );
             }
         })
     }
@@ -394,7 +398,6 @@ ReservedObject<RegistersHandler<7>> registers_handler;
 ReservedObject<FOCCommandSub> foc_command_sub;
 ReservedObject<SpecificControlSub> specific_control_sub;
 #endif
-static constexpr std::string TST = "1234567890ABCDE";
 void setup_subscriptions() {
     auto cyphal_interface = get_interface();
 
