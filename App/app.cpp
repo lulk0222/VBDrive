@@ -11,6 +11,7 @@
 #include "spi.h"
 #include "cordic.h"
 
+#include <voltbro/devices/stspin32g4.hpp>
 #include <cyphal/node/node_info_handler.h>
 #include <cyphal/node/registers_handler.hpp>
 #include <cyphal/node/registers_utils.hpp>
@@ -104,6 +105,7 @@ EEPROM eeprom(&hi2c2, 64, I2C_MEMADD_SIZE_16BIT);
 EEPROM& get_eeprom() {
     return eeprom;
 }
+static STSPIN32G4 motor_gate_driver(&hi2c3, GpioPin(DRV_WAKE_GPIO_Port, DRV_WAKE_Pin));
 
 // correct elec_offset will be set by apply_calibration
 AS5047P motor_encoder(GpioPin(SPI1_CS0_GPIO_Port, SPI1_CS0_Pin), &hspi1);
@@ -183,6 +185,7 @@ void create_motor(VBDriveConfig& config_data) {
         &htim1,
         motor_encoder,
         motor_inverter,
+        motor_gate_driver,
         inductive_sensor,
         config_data.angle_encoder
     );
