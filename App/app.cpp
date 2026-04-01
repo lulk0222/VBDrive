@@ -256,6 +256,11 @@ void app() {
     apply_calibration();
     motor->set_foc_point(FOCTarget{0});
 
+    // Warm up
+    for (uint8_t i = 0; i < 32; ++i) {
+        motor->update();
+    }
+
     while (!app_manager.is_app_running()) {
         // Hold here until calibrated
     }
@@ -311,6 +316,26 @@ static constexpr CanardPortID FOC_STATE_PORT = 3811;
 static constexpr CanardPortID SPECIFIC_CONTROL_PORT = 3407;
 
 static uint32_t invalid_commands_counter = 0;
+
+using ConfigFloatSetter = void (*)(VBDriveConfig&, float);
+
+static bool update_persistent_float_register(
+    float DriveLimits::* limits_field,
+    ConfigFloatSetter config_setter,
+    float value
+) {
+    DriveLimits limits = motor->get_limits();
+    limits.*limits_field = value;
+    if (!motor->set_limits(limits)) {
+        return false;
+    }
+
+    auto& config = get_app_manager().get_config();
+    config_setter(config, value);
+    config.was_configured = config.are_required_params_set();
+    HAL_IMPORTANT(get_eeprom().write<VBDriveConfig>(&config, CONFIG_PLACEMENT))
+    return true;
+}
 
 
 void in_loop_reporting(millis current_t) {
@@ -394,10 +419,9 @@ public:
 
 // NOTE: underlying CanardRxSubscriptions are HUGE - 552 bytes each. C++ wrapper size is negligible in comparison
 ReservedObject<NodeInfoReader> node_info_reader;
-ReservedObject<RegistersHandler<7>> registers_handler;
+ReservedObject<RegistersHandler<8>> registers_handler;
 ReservedObject<FOCCommandSub> foc_command_sub;
 ReservedObject<SpecificControlSub> specific_control_sub;
-#endif
 void setup_subscriptions() {
     auto cyphal_interface = get_interface();
 
@@ -410,13 +434,14 @@ void setup_subscriptions() {
     );
 
     const auto node_id = get_app_manager().get_node_id();
-    auto make_limit_register = [](
+    auto make_persistent_float_register = [](
         const char* name,
-        float DriveLimits::* field
+        float DriveLimits::* limits_field,
+        ConfigFloatSetter config_setter
     ) -> RegisterDefinition {
         return {
             name,
-            [field](
+            [limits_field, config_setter](
                 const uavcan_register_Value_1_0& v_in,
                 uavcan_register_Value_1_0& v_out,
                 RegisterAccessResponse::Type& response
@@ -424,21 +449,19 @@ void setup_subscriptions() {
                 if (v_in._tag_ != REGISTER_EMPTY_TAG) {
                     float value = 0.0f;
                     if (parse_register_real32(v_in, value)) {
-                        DriveLimits limits = motor->get_limits();
-                        limits.*field = value;
-                        motor->set_limits(limits);
+                        update_persistent_float_register(limits_field, config_setter, value);
                     }
                 }
 
-                response.persistent = false;
+                response.persistent = true;
                 response._mutable = true;
-                fill_register_real32(v_out, motor->get_limits().*field);
+                fill_register_real32(v_out, motor->get_limits().*limits_field);
             }
         };
     };
 
     registers_handler.create(
-        std::array<RegisterDefinition, 7>{{
+        std::array<RegisterDefinition, 8>{{
             {
                 "state.is_on",
                 [](
@@ -465,16 +488,42 @@ void setup_subscriptions() {
                     uavcan_register_Value_1_0& v_out,
                     RegisterAccessResponse::Type& response
                 ){
+                    (void) v_in;
                     response.persistent = false;
                     response._mutable = false;
                     fill_register_natural32(v_out, invalid_commands_counter);
                 }
             },
-            make_limit_register("limit.current", &DriveLimits::user_current_limit),
-            make_limit_register("limit.torque", &DriveLimits::user_torque_limit),
-            make_limit_register("limit.speed", &DriveLimits::user_speed_limit),
-            make_limit_register("limit.min_angle", &DriveLimits::user_position_lower_limit),
-            make_limit_register("limit.max_angle", &DriveLimits::user_position_upper_limit)
+            make_persistent_float_register(
+                "limit.current",
+                &DriveLimits::user_current_limit,
+                [](VBDriveConfig& config, float value) { config.max_current = value; }
+            ),
+            make_persistent_float_register(
+                "limit.torque",
+                &DriveLimits::user_torque_limit,
+                [](VBDriveConfig& config, float value) { config.max_torque = value; }
+            ),
+            make_persistent_float_register(
+                "limit.speed",
+                &DriveLimits::user_speed_limit,
+                [](VBDriveConfig& config, float value) { config.max_speed = value; }
+            ),
+            make_persistent_float_register(
+                "limit.min_angle",
+                &DriveLimits::user_position_lower_limit,
+                [](VBDriveConfig& config, float value) { config.min_angle = value; }
+            ),
+            make_persistent_float_register(
+                "limit.max_angle",
+                &DriveLimits::user_position_upper_limit,
+                [](VBDriveConfig& config, float value) { config.max_angle = value; }
+            ),
+            make_persistent_float_register(
+                "angle.offset",
+                &DriveLimits::user_angle_offset,
+                [](VBDriveConfig& config, float value) { config.angle_offset = value; }
+            )
         }},
         cyphal_interface
     );

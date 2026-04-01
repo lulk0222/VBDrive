@@ -49,7 +49,7 @@ The board uses a UART-based serial interface for configuration, calibration, tes
 | `max_current`  | Maximum motor current (A)                           | Float   | `5.0`, `10.5`  |
 | `max_speed`    | Maximum motor speed (rad)                           | Float   | `1000.0`       |
 | `max_torque`   | Maximum torque output (Nm)                          | Float   | `1.2`          |
-| `angle_offset` | Motor angle offset (rad)                            | Float   | `0.0`, `15.5`  |
+| `angle_offset` | Joint angle offset (rad)                            | Float   | `0.0`, `15.5`  |
 | `min_angle`    | Minimum allowed angle (rad)                         | Float   | `-30.0`        |
 | `max_angle`    | Maximum allowed angle (rad)                         | Float   | `30.0`         |
 | `torque_const` | Torque constant (Nm/A)                              | Float   | `0.12`         |
@@ -111,7 +111,7 @@ When logging is enabled in TEST mode, UART periodically prints:
 
 * **Success**: `OK: <param>:<value>` or `OK: <param> :<value>` (set operations)
 * **Error**: `ERROR: Unknown command`, `ERROR: Unknown parameter`, `ERROR: Invalid value`
-* **Config persistence**: Settings are written to EEPROM on `SAVE`/`APPLY` (not on every `SET`)
+* **Config persistence**: UART configuration settings are written to EEPROM on `SAVE`/`APPLY` (not on every `SET`)
 
 ---
 
@@ -168,9 +168,39 @@ The BLDC Motor Controller communicates over **Cyphal/FDCAN** to publish real-tim
 
 ### **Registers**
 
-| Register Name | Type   | Description                                         |
-| ------------- | ------ | --------------------------------------------------- |
-| `motor.is_on` | `bool` | Turns underlying motor driver on/off                |
+| Register Name     | Type        | Persistence | Description                          |
+| -------------     | ----        | ----------- | -----------                          |
+| `state.is_on`     | `bool`      | Runtime     | Turns underlying motor driver on/off |
+| `state.errors`    | `natural32` | Runtime     | Invalid Cyphal command counter       |
+| `limit.current`   | `real32`    | EEPROM      | Current limit in amperes             |
+| `limit.torque`    | `real32`    | EEPROM      | Torque limit in N m                  |
+| `limit.speed`     | `real32`    | EEPROM      | Speed limit in rad/s                 |
+| `limit.min_angle` | `real32`    | EEPROM      | Lower joint angle limit in rad       |
+| `limit.max_angle` | `real32`    | EEPROM      | Upper joint angle limit in rad       |
+| `angle.offset`    | `real32`    | EEPROM      | Joint angle offset in rad            |
+
+### **Angle Frame Semantics**
+
+> NOTE: angle offset only makes sense with angle_encoder=1 (shaft output encoder). Rotor encoder (0) is not absolute in reference to shaft position
+
+All joint-angle values exposed over Cyphal use the same corrected frame:
+
+* `reported_angle = measured_shaft_angle + angle.offset`
+* `voltbro.foc.command.angle`, `voltbro.foc.specific_control` position targets, `limit.min_angle`, and `limit.max_angle` are all interpreted in that corrected frame
+* Positive `angle.offset` increases the reported and commanded joint angle for the same physical shaft position
+* Units are radians
+
+This means limit enforcement and position control are applied after the offset is added, so the configured limits match the angles seen by higher-level kinematics.
+
+### **Calibration Workflow**
+
+1. Move the joint to the desired mechanical zero.
+2. Read the current joint angle.
+3. Compute the required offset so the reported angle becomes zero:
+   `angle.offset = -measured_shaft_angle`
+4. Write `angle.offset` via `uavcan.register.Access`.
+5. Read back `angle.offset`, `limit.min_angle`, and `limit.max_angle` to confirm the corrected frame.
+6. Set `limit.min_angle` and `limit.max_angle` in the same corrected frame.
 
 ---
 
@@ -179,7 +209,7 @@ The BLDC Motor Controller communicates over **Cyphal/FDCAN** to publish real-tim
 The controller also supports standard Cyphal services:
 
 * **uavcan.node.GetInfo** — Reports node information (name: `"org.voltbro.vbdrive"`)
-* **uavcan.register.Access** — For reading/writing runtime parameters
+* **uavcan.register.Access** — For reading/writing "high-level" parameters
 * **uavcan.register.List** — List registers
 * **uavcan.node.Heartbeat** — Node status monitoring
 
