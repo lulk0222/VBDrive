@@ -106,11 +106,7 @@ void start_cyphal() {
 
     cyphal_interface = std::shared_ptr<CyphalInterface>(CyphalInterface::create_bss<G4CAN, O1Allocator>(
         cyphal_bss_buffer,
-        #ifndef LCM
         get_app_manager().get_node_id(),
-        #else
-        10,
-        #endif
         &hfdcan1,
         CYPHAL_QUEUE_SIZE,
         utilities,
