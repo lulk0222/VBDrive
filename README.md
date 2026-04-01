@@ -168,9 +168,21 @@ The BLDC Motor Controller communicates over **Cyphal/FDCAN** to publish real-tim
 
 ### **Registers**
 
-| Register Name | Type   | Description                                         |
-| ------------- | ------ | --------------------------------------------------- |
-| `motor.is_on` | `bool` | Turns underlying motor driver on/off                |
+All registers are served via `uavcan.register.Access` and `uavcan.register.List`.
+All registers report `persistent = false`.
+`config.save_now` is an explicit action register: writing `true` saves current config to EEPROM immediately.
+
+| Register Name         | Type     | Description                                                |
+| --------------------- | -------- | ---------------------------------------------------------- |
+| `state.is_on`         | `bool`   | Turns underlying motor driver on/off                       |
+| `state.errors`        | `uint32` | Number of invalid control commands                         |
+| `config.save_now`     | `bool`   | Write `true` to persist current config to EEPROM (`false`/read = no action) |
+| `limit.current`       | `real32` | Runtime current limit                                      |
+| `limit.torque`        | `real32` | Runtime torque limit                                       |
+| `limit.speed`         | `real32` | Runtime speed limit                                        |
+| `limit.angle_offset`  | `real32` | Runtime shaft angle offset (applied immediately)           |
+| `limit.min_angle`     | `real32` | Runtime minimum allowed shaft angle                        |
+| `limit.max_angle`     | `real32` | Runtime maximum allowed shaft angle                        |
 
 ---
 
