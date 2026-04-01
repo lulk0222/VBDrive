@@ -302,9 +302,6 @@ void app() {
 
 #ifndef NO_CYPHAL
 //#pragma region Cyphal
-#ifdef LCM
-#include "lcm.h"
-#else
 TYPE_ALIAS(FOCCommand, voltbro_foc_command_1_0)
 TYPE_ALIAS(FOCState, voltbro_foc_state_simple_1_0)
 TYPE_ALIAS(SpecificControl, voltbro_foc_specific_control_1_0)
@@ -404,16 +401,6 @@ ReservedObject<SpecificControlSub> specific_control_sub;
 void setup_subscriptions() {
     auto cyphal_interface = get_interface();
 
-#ifdef LCM
-    HAL_FDCAN_ConfigGlobalFilter(
-        &hfdcan1,
-        FDCAN_ACCEPT_IN_RX_FIFO0,
-        FDCAN_ACCEPT_IN_RX_FIFO0,
-        FDCAN_FILTER_REMOTE,
-        FDCAN_FILTER_REMOTE
-    );
-    lcm_command_sub.create(cyphal_interface);
-#else
     HAL_FDCAN_ConfigGlobalFilter(
         &hfdcan1,
         FDCAN_REJECT,
@@ -527,7 +514,6 @@ void setup_subscriptions() {
         &hfdcan1,
         specific_control_sub->make_filter(node_id)
     ))
-#endif
 }
 //#pragma endregion
 #endif
