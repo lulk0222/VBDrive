@@ -161,7 +161,12 @@ void create_motor(VBDriveConfig& config_data) {
             .user_speed_limit = value_or_default(config_data.max_speed, NAN),
             .user_position_lower_limit = value_or_default(config_data.min_angle, NAN),
             .user_position_upper_limit = value_or_default(config_data.max_angle, NAN),
-            .user_angle_offset = value_or_default(config_data.angle_offset, VBDriveDefaults::ANGLE_OFFSET)
+            .user_angle_offset = value_or_default(config_data.angle_offset, VBDriveDefaults::ANGLE_OFFSET),
+            .user_angle_direction = value_or_default(
+                config_data.angle_direction,
+                VBDriveDefaults::ANGLE_DIRECTION,
+                static_cast<int8_t>(0)
+            )
         },
         // Built-in constant parameters
         DriveInfo {
@@ -419,7 +424,7 @@ public:
 
 // NOTE: underlying CanardRxSubscriptions are HUGE - 552 bytes each. C++ wrapper size is negligible in comparison
 ReservedObject<NodeInfoReader> node_info_reader;
-ReservedObject<RegistersHandler<8>> registers_handler;
+ReservedObject<RegistersHandler<9>> registers_handler;
 ReservedObject<FOCCommandSub> foc_command_sub;
 ReservedObject<SpecificControlSub> specific_control_sub;
 void setup_subscriptions() {
@@ -459,9 +464,43 @@ void setup_subscriptions() {
             }
         };
     };
+    auto make_persistent_int_register = [](
+        const char* name,
+        int8_t DriveLimits::* limits_field,
+        auto config_setter
+    ) -> RegisterDefinition {
+        return {
+            name,
+            [limits_field, config_setter](
+                const uavcan_register_Value_1_0& v_in,
+                uavcan_register_Value_1_0& v_out,
+                RegisterAccessResponse::Type& response
+            ) {
+                if (v_in._tag_ != REGISTER_EMPTY_TAG) {
+                    int32_t value = 0;
+                    if (
+                        parse_register_integer32(v_in, value) &&
+                        ((value == -1) || (value == 1))
+                    ) {
+                        auto new_limits = motor->get_limits();
+                        new_limits.*limits_field = static_cast<int8_t>(value);
+                        if (motor->set_limits(new_limits)) {
+                            auto& config = get_app_manager().get_config();
+                            config_setter(config, static_cast<int8_t>(value));
+                            HAL_IMPORTANT(get_eeprom().write(&config, CONFIG_PLACEMENT))
+                        }
+                    }
+                }
+
+                response.persistent = true;
+                response._mutable = true;
+                fill_register_integer32(v_out, motor->get_limits().*limits_field);
+            }
+        };
+    };
 
     registers_handler.create(
-        std::array<RegisterDefinition, 8>{{
+        std::array<RegisterDefinition, 9>{{
             {
                 "state.is_on",
                 [](
@@ -523,6 +562,11 @@ void setup_subscriptions() {
                 "angle.offset",
                 &DriveLimits::user_angle_offset,
                 [](VBDriveConfig& config, float value) { config.angle_offset = value; }
+            ),
+            make_persistent_int_register(
+                "angle.direction",
+                &DriveLimits::user_angle_direction,
+                [](VBDriveConfig& config, int8_t value) { config.angle_direction = value; }
             )
         }},
         cyphal_interface

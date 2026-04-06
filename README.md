@@ -50,6 +50,7 @@ The board uses a UART-based serial interface for configuration, calibration, tes
 | `max_speed`    | Maximum motor speed (rad)                           | Float   | `1000.0`       |
 | `max_torque`   | Maximum torque output (Nm)                          | Float   | `1.2`          |
 | `angle_offset` | Joint angle offset (rad)                            | Float   | `0.0`, `15.5`  |
+| `angle_direction` | Sign of the angle/velocity/torque frame (`1` or `-1`); flips reported values and control effort to match mechanical mounting vs. software convention | Integer | `1`, `-1`      |
 | `min_angle`    | Minimum allowed angle (rad)                         | Float   | `-30.0`        |
 | `max_angle`    | Maximum allowed angle (rad)                         | Float   | `30.0`         |
 | `torque_const` | Torque constant (Nm/A)                              | Float   | `0.12`         |
@@ -178,6 +179,7 @@ The BLDC Motor Controller communicates over **Cyphal/FDCAN** to publish real-tim
 | `limit.min_angle` | `real32`    | EEPROM      | Lower joint angle limit in rad       |
 | `limit.max_angle` | `real32`    | EEPROM      | Upper joint angle limit in rad       |
 | `angle.offset`    | `real32`    | EEPROM      | Joint angle offset in rad            |
+| `angle.direction` | `integer32` | EEPROM      | `1` or `-1`; same semantics as UART `angle_direction` (see configuration table) |
 
 ### **Angle Frame Semantics**
 
@@ -185,7 +187,8 @@ The BLDC Motor Controller communicates over **Cyphal/FDCAN** to publish real-tim
 
 All joint-angle values exposed over Cyphal use the same corrected frame:
 
-* `reported_angle = measured_shaft_angle + angle.offset`
+* `angle_direction` (UART) / `angle.direction` (Cyphal register) must be `1` or `-1`. It scales measured shaft angle, velocity, torque, and torque/velocity targets so positive commands match the intended mechanical direction.
+* `reported_angle = measured_shaft_angle * angle.direction + angle.offset`
 * `voltbro.foc.command.angle`, `voltbro.foc.specific_control` position targets, `limit.min_angle`, and `limit.max_angle` are all interpreted in that corrected frame
 * Positive `angle.offset` increases the reported and commanded joint angle for the same physical shaft position
 * Units are radians

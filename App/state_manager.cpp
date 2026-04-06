@@ -102,6 +102,7 @@ static constexpr std::string MAX_CURRENT_PARAM = "max_current";
 static constexpr std::string MAX_SPEED_PARAM = "max_speed";
 static constexpr std::string MAX_TORQUE_PARAM = "max_torque";
 static constexpr std::string ANGLE_OFFSET_PARAM = "angle_offset";
+static constexpr std::string ANGLE_DIRECTION_PARAM = "angle_direction";
 static constexpr std::string MIN_ANGLE_PARAM = "min_angle";
 static constexpr std::string MAX_ANGLE_PARAM = "max_angle";
 static constexpr std::string TORQUE_CONST_PARAM = "torque_const";
@@ -121,6 +122,7 @@ void VBDriveConfig::print_self(UARTResponseAccumulator& responses) {
     get(MAX_SPEED_PARAM, responses);
     get(MAX_TORQUE_PARAM, responses);
     get(ANGLE_OFFSET_PARAM, responses);
+    get(ANGLE_DIRECTION_PARAM, responses);
     get(MIN_ANGLE_PARAM, responses);
     get(MAX_ANGLE_PARAM, responses);
     get(TORQUE_CONST_PARAM, responses);
@@ -158,6 +160,16 @@ void VBDriveConfig::get(const std::string& param, UARTResponseAccumulator& respo
     }
     else if (param == ANGLE_OFFSET_PARAM) {
         responses.append("angle_offset:%f\n\r", value_or_default(angle_offset, VBDriveDefaults::ANGLE_OFFSET));
+    }
+    else if (param == ANGLE_DIRECTION_PARAM) {
+        responses.append(
+            "angle_direction:%d\n\r",
+            static_cast<int>(value_or_default(
+                angle_direction,
+                VBDriveDefaults::ANGLE_DIRECTION,
+                static_cast<int8_t>(0)
+            ))
+        );
     }
     else if (param == MIN_ANGLE_PARAM) {
         responses.append("min_angle:%f\n\r", value_or_default(min_angle, NAN));
@@ -210,7 +222,11 @@ bool VBDriveConfig::set(const std::string& param, std::string& value, UARTRespon
     int new_int_value = 0;
     float new_float_value = 0;
     bool is_converted = false;
-    if (param == GEAR_RATIO_PARAM || param == ANGLE_ENCODER_PARAM) {
+    if (
+        param == GEAR_RATIO_PARAM ||
+        param == ANGLE_ENCODER_PARAM ||
+        param == ANGLE_DIRECTION_PARAM
+    ) {
         is_converted = safe_stoi(value, new_int_value);
     } else {
         is_converted = safe_stof(value, new_float_value);
@@ -227,6 +243,14 @@ bool VBDriveConfig::set(const std::string& param, std::string& value, UARTRespon
     else if (param == ANGLE_ENCODER_PARAM) {
         angle_encoder = static_cast<AngleEncoderType>(new_int_value);
         responses.append("OK: angle_encoder:%u\n\r", to_underlying(angle_encoder));
+    }
+    else if (param == ANGLE_DIRECTION_PARAM) {
+        if ((new_int_value != -1) && (new_int_value != 1)) {
+            responses.append("ERROR: Invalid value\n\r");
+            return false;
+        }
+        angle_direction = static_cast<int8_t>(new_int_value);
+        responses.append("OK: angle_direction:%d\n\r", static_cast<int>(angle_direction));
     }
     CHECK_AND_SET_PARAM_FLOAT(max_current, MAX_CURRENT_PARAM)
     CHECK_AND_SET_PARAM_FLOAT(max_speed, MAX_SPEED_PARAM)
