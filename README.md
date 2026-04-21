@@ -23,7 +23,7 @@ The board uses a UART-based serial interface for configuration, calibration, tes
 
 * **Write parameter**:
   `<parameter_name>:<value>`
-  Example: `kp:0.35` -> `OK: kp :0.350000`
+  Example: `kp:0.35` -> `OK: kp:0.350000`
 
 ---
 
@@ -43,29 +43,28 @@ The board uses a UART-based serial interface for configuration, calibration, tes
 
 ### **Configuration Parameters**
 
-| Parameter      | Description                                         | Type    | Example Values |
-| -------------- | --------------------------------------------------- | ------- | -------------- |
-| `gear_ratio`   | Gear ratio of the drive                             | Integer | `1`, `5`, `15` |
-| `max_current`  | Maximum motor current (A)                           | Float   | `5.0`, `10.5`  |
-| `max_speed`    | Maximum motor speed (rad)                           | Float   | `1000.0`       |
-| `max_torque`   | Maximum torque output (Nm)                          | Float   | `1.2`          |
-| `angle_offset` | Joint angle offset (rad)                            | Float   | `0.0`, `15.5`  |
-| `angle_direction` | Sign of the angle/velocity/torque frame (`1` or `-1`); flips reported values and control effort to match mechanical mounting vs. software convention | Integer | `1`, `-1`      |
-| `min_angle`    | Minimum allowed angle (rad)                         | Float   | `-30.0`        |
-| `max_angle`    | Maximum allowed angle (rad)                         | Float   | `30.0`         |
-| `torque_const` | Torque constant (Nm/A)                              | Float   | `0.12`         |
-| `kp`           | Current proportional gain                           | Float   | `0.25`         |
-| `ki`           | Current integral gain                               | Float   | `0.01`         |
-| `kd`           | Current derivative gain                             | Float   | `0.005`        |
-| `filter_a`     | Main filter parameter A                             | Float   | `0.5`          |
-| `filter_g1`    | Filter gain 1                                       | Float   | `0.1`          |
-| `filter_g2`    | Filter gain 2                                       | Float   | `0.1`          |
-| `filter_g3`    | Filter gain 3                                       | Float   | `0.1`          |
-| `I_lpf`        | Current low-pass filter coefficient                 | Float   | `0.1`          |
-| `angle_encoder`| Angle encoder type enum, 0 rotor, 1 - shaft         | Integer | `0`, `1`.      |
-| `node_id`      | Cyphal/CAN node ID                                  | Integer | `1`, `42`      |
-| `data_baud`    | FDCAN data baud rate enum (see below)               | Enum    | `0`, `1`, `2`  |
-| `nominal_baud` | FDCAN nominal baud rate enum (see below)            | Enum    | `3`, `4`       |
+| Parameter  | Description                                               | Type    | Example Values |
+| ---------- | --------------------------------------------------------- | ------- | -------------- |
+| `gear`     | Gear ratio of the drive                                   | Integer | `1`, `5`, `15` |
+| `max_i`    | Maximum motor current (A)                                 | Float   | `5.0`, `10.5`  |
+| `max_spd`  | Maximum motor speed (rad)                                 | Float   | `1000.0`       |
+| `max_tq`   | Maximum torque output (Nm)                                | Float   | `1.2`          |
+| `ang_off`  | Joint angle offset (rad)                                  | Float   | `0.0`, `15.5`  |
+| `min_ang`  | Minimum allowed angle (rad)                               | Float   | `-30.0`        |
+| `max_ang`  | Maximum allowed angle (rad)                               | Float   | `30.0`         |
+| `kt`       | Torque constant (Nm/A)                                    | Float   | `0.12`         |
+| `kp`       | Current proportional gain                                 | Float   | `0.25`         |
+| `ki`       | Current integral gain                                     | Float   | `0.01`         |
+| `kd`       | Current derivative gain                                   | Float   | `0.005`        |
+| `flt_a`    | Main filter parameter A                                   | Float   | `0.5`          |
+| `flt_g1`   | Filter gain 1                                             | Float   | `0.1`          |
+| `flt_g2`   | Filter gain 2                                             | Float   | `0.1`          |
+| `flt_g3`   | Filter gain 3                                             | Float   | `0.1`          |
+| `i_lpf`    | Current low-pass filter coefficient                       | Float   | `0.1`          |
+| `ang_enc`  | Angle encoder type enum, 0 rotor, 1 - shaft               | Integer | `0`, `1`.      |
+| `node_id`  | Cyphal/CAN node ID                                        | Integer | `1`, `42`      |
+| `d_baud`   | FDCAN data baud rate enum (see below)                     | Enum    | `0`, `1`, `2`  |
+| `n_baud`   | FDCAN nominal baud rate enum (see below)                  | Enum    | `3`, `4`       |
 
 ---
 
@@ -73,13 +72,13 @@ The board uses a UART-based serial interface for configuration, calibration, tes
 
 | parameter           | Value Name | Speed    | Numeric Value |
 |---------------------|------------|----------|---------------|
-| `nominal_baud`      | `KHz62`    | 62.5 kHz | `0`           |
+| `n_baud`            | `KHz62`    | 62.5 kHz | `0`           |
 |                     | `KHz125`   | 125 kHz  | `1`           |
 |                     | `KHz250`   | 250 kHz  | `2`           |
 |                     | `KHz500`   | 500 kHz  | `3`           |
 |                     | `KHz1000`  | 1 MHz    | `4`           |
 |---------------------|------------|----------|---------------|
-| `data_baud`         | `KHz1000`  | 1 MHz    | `0`           |
+| `d_baud`            | `KHz1000`  | 1 MHz    | `0`           |
 |                     | `KHz2000`  | 2 MHz    | `1`           |
 |                     | `KHz4000`  | 4 MHz    | `2`           |
 |                     | `KHz8000`  | 8 MHz    | `3`           |
@@ -90,14 +89,14 @@ The board uses a UART-based serial interface for configuration, calibration, tes
 
 | Command | Description |
 | ------- | ----------- |
-| `do.velocity:<value>` | Set velocity target for FOC test controller |
-| `do.angle:<value>` | Set angle target for FOC test controller |
-| `do.free` | Zero target (no effort mode) |
-| `min_angle:<value or ?>` | Read/write lower position limit during test |
-| `max_angle:<value or ?>` | Read/write upper position limit during test |
-| `angle_offset:<value or ?>` | Read/write angle offset during test |
-| `log.start` | Start UART test logging |
-| `log.stop` | Stop UART test logging |
+| `do_vel:<value>` | Set velocity target for FOC test controller |
+| `do_ang:<value>` | Set angle target for FOC test controller |
+| `do_free` | Zero target (no effort mode) |
+| `min_ang:<value or ?>` | Read/write lower position limit during test |
+| `max_ang:<value or ?>` | Read/write upper position limit during test |
+| `ang_off:<value or ?>` | Read/write angle offset during test |
+| `log_on` | Start UART test logging |
+| `log_off` | Stop UART test logging |
 | `STOP` | Exit test mode |
 
 When logging is enabled in TEST mode, UART periodically prints:
@@ -110,7 +109,7 @@ When logging is enabled in TEST mode, UART periodically prints:
 
 ### **Response Format**
 
-* **Success**: `OK: <param>:<value>` or `OK: <param> :<value>` (set operations)
+* **Success**: `OK: <param>:<value>` (set operations)
 * **Error**: `ERROR: Unknown command`, `ERROR: Unknown parameter`, `ERROR: Invalid value`
 * **Config persistence**: UART configuration settings are written to EEPROM on `SAVE`/`APPLY` (not on every `SET`)
 
@@ -124,8 +123,8 @@ When logging is enabled in TEST mode, UART periodically prints:
 CONFIG MODE ENABLED
 > node_id:11
 OK: node_id:11
-> gear_ratio:36
-OK: gear_ratio:36
+> gear:36
+OK: gear:36
 > SAVE
 Saved config
 NOTE: config changes not applied! To apply, run APPLY or reset controller
@@ -136,9 +135,9 @@ NOTE: config changes not applied! To apply, run APPLY or reset controller
 # Test flow
 > TEST
 Entering TEST mode
-> do.velocity:5
+> do_vel:5
 Set velocity: <5.000000>
-> log.start
+> log_on
 # periodic sensor logs...
 > STOP
 Stopping TEST mode
@@ -179,16 +178,14 @@ The BLDC Motor Controller communicates over **Cyphal/FDCAN** to publish real-tim
 | `limit.min_angle` | `real32`    | EEPROM      | Lower joint angle limit in rad       |
 | `limit.max_angle` | `real32`    | EEPROM      | Upper joint angle limit in rad       |
 | `angle.offset`    | `real32`    | EEPROM      | Joint angle offset in rad            |
-| `angle.direction` | `integer32` | EEPROM      | `1` or `-1`; same semantics as UART `angle_direction` (see configuration table) |
 
 ### **Angle Frame Semantics**
 
-> NOTE: angle offset only makes sense with angle_encoder=1 (shaft output encoder). Rotor encoder (0) is not absolute in reference to shaft position
+> NOTE: angle offset only makes sense with ang_enc=1 (shaft output encoder). Rotor encoder (0) is not absolute in reference to shaft position
 
 All joint-angle values exposed over Cyphal use the same corrected frame:
 
-* `angle_direction` (UART) / `angle.direction` (Cyphal register) must be `1` or `-1`. It scales measured shaft angle, velocity, torque, and torque/velocity targets so positive commands match the intended mechanical direction.
-* `reported_angle = measured_shaft_angle * angle.direction + angle.offset`
+* `reported_angle = measured_shaft_angle + angle.offset`
 * `voltbro.foc.command.angle`, `voltbro.foc.specific_control` position targets, `limit.min_angle`, and `limit.max_angle` are all interpreted in that corrected frame
 * Positive `angle.offset` increases the reported and commanded joint angle for the same physical shaft position
 * Units are radians

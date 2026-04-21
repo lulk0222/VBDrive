@@ -47,7 +47,7 @@ volatile uint32_t last_cycle_cost = 0;
 volatile uint32_t value_invocations = 0;
 #endif
 
-__attribute__((hot, flatten)) void main_callback() {
+__attribute__((hot)) void main_callback() {
     auto& app_manager = get_app_manager();
 
     #ifdef ENABLE_DT

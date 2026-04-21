@@ -10,7 +10,6 @@ namespace VBDriveDefaults {
     inline constexpr uint8_t GEAR_RATIO = 36;
     inline constexpr float TORQUE_CONST = 1.0f;
     inline constexpr float ANGLE_OFFSET = 0.0f;
-    inline constexpr int8_t ANGLE_DIRECTION = 1;
     inline constexpr float PID_KP = 4.0f;
     inline constexpr float PID_KI = 1600.0f;
     inline constexpr float PID_KD = 0.0f;
@@ -22,7 +21,7 @@ namespace VBDriveDefaults {
 }  // namespace VBDriveDefaults
 
 struct __attribute__((packed)) VBDriveConfig: public BaseConfigData {
-    static constexpr uint32_t TYPE_ID = 0x44AAABBC;
+    static constexpr uint32_t TYPE_ID = 0x44AAABFE;
     uint8_t gear_ratio = 0;
     // NAN means not set
     float max_voltage = NAN;
@@ -42,7 +41,6 @@ struct __attribute__((packed)) VBDriveConfig: public BaseConfigData {
     float filter_g3 = NAN;
     float I_lpf_coefficient = NAN;
     AngleEncoderType angle_encoder = AngleEncoderType::ROTOR;
-    int8_t angle_direction = VBDriveDefaults::ANGLE_DIRECTION;
 
     VBDriveConfig(): BaseConfigData() {
         type_id = VBDriveConfig::TYPE_ID;
@@ -71,17 +69,16 @@ protected:
     static constexpr std::string_view TEST_COMMAND = "TEST";
     static constexpr std::string_view CALIBRATE_COMMAND = "CALIBRATE";
     static constexpr std::string_view STOP_COMMAND = "STOP";
-    static constexpr std::string_view VEL_PARAM = "do.velocity";
-    static constexpr std::string_view ANGLE_PARAM = "do.angle";
-    static constexpr std::string_view FREE_COMMAND = "do.free";
-    static constexpr std::string_view START_LOGGING_COMMAND = "log.start";
-    static constexpr std::string_view STOP_LOGGING_COMMAND = "log.stop";
+    static constexpr std::string_view VEL_PARAM = "do_vel";
+    static constexpr std::string_view ANGLE_PARAM = "do_ang";
+    static constexpr std::string_view FREE_COMMAND = "do_free";
+    static constexpr std::string_view START_LOGGING_COMMAND = "log_on";
+    static constexpr std::string_view STOP_LOGGING_COMMAND = "log_off";
 
-    const std::array<std::string_view, 4> editable_in_test_mode = {
-        "min_angle",
-        "max_angle",
-        "angle_offset",
-        "angle_direction"
+    const std::array<std::string_view, 3> editable_in_test_mode = {
+        "min_ang",
+        "max_ang",
+        "ang_off"
     };
 
     bool _is_logging = false;
@@ -202,7 +199,6 @@ public:
                     // Apply limits dynamically in this session
                     auto new_limits = motor->get_limits();
                     new_limits.user_angle_offset = config_data.angle_offset;
-                    new_limits.user_angle_direction = config_data.angle_direction;
                     new_limits.user_position_lower_limit = config_data.min_angle;
                     new_limits.user_position_upper_limit = config_data.max_angle;
                     motor->set_limits(new_limits);
