@@ -35,6 +35,8 @@
 #include <voltbro/utils.hpp>
 //#pragma endregion
 
+static constexpr CanardNodeID UNCONFIGURED_SETUP_NODE_ID = 126;
+
 //#pragma region ExternConfiguration
 #define NANOPRINTF_IMPLEMENTATION
 #define NANOPRINTF_USE_FIELD_WIDTH_FORMAT_SPECIFIERS 1
@@ -123,6 +125,13 @@ VBDrive* get_motor() {
     return motor;
 }
 
+static int8_t config_angle_direction(const VBDriveConfig& config_data) {
+    if (config_data.max_voltage == -1.0f) {
+        return -1;
+    }
+    return 1;
+}
+
 void create_motor(VBDriveConfig& config_data) {
     motor = new (&motor_storage) VBDrive(
         0.000025f,
@@ -161,7 +170,8 @@ void create_motor(VBDriveConfig& config_data) {
             .user_speed_limit = value_or_default(config_data.max_speed, NAN),
             .user_position_lower_limit = value_or_default(config_data.min_angle, NAN),
             .user_position_upper_limit = value_or_default(config_data.max_angle, NAN),
-            .user_angle_offset = value_or_default(config_data.angle_offset, VBDriveDefaults::ANGLE_OFFSET)
+            .user_angle_offset = value_or_default(config_data.angle_offset, VBDriveDefaults::ANGLE_OFFSET),
+            .user_angle_direction = config_angle_direction(config_data)
         },
         // Built-in constant parameters
         DriveInfo {
@@ -233,6 +243,9 @@ void apply_calibration() {
     motor->apply_calibration(calibration_data);
 }
 
+static void persist_pending_config_if_needed();
+static void reboot_to_bootloader_if_requested();
+
 void app() {
 #ifdef FOC_PROFILE
     mark_stack();
@@ -244,10 +257,26 @@ void app() {
     app_manager.init();
     start_uart_recv_it();
     auto& config_data = app_manager.get_config();
+    if (!app_manager.is_app_running() && config_data.are_required_params_set()) {
+        config_data.was_configured = true;
+        app_manager.set_state(CommandState::RUNNING);
+    }
 
     if (!app_manager.is_app_running()) {
-        // Hold here until configured and REBOOTED (by APPLY command)
-        while (true) {}
+        // Bring up Cyphal even with blank EEPROM so config can be restored over CAN.
+        if (config_data.node_id == 0) {
+            config_data.node_id = UNCONFIGURED_SETUP_NODE_ID;
+        }
+        start_cyphal();
+        set_cyphal_mode(uavcan_node_Mode_1_0_OPERATIONAL);
+        while (true) {
+            cyphal_loop();
+            persist_pending_config_if_needed();
+            reboot_to_bootloader_if_requested();
+            if (app_manager.is_app_running()) {
+                HAL_NVIC_SystemReset();
+            }
+        }
     }
 
     setup_cordic();
@@ -259,10 +288,6 @@ void app() {
     // Warm up
     for (uint8_t i = 0; i < 32; ++i) {
         motor->update();
-    }
-
-    while (!app_manager.is_app_running()) {
-        // Hold here until calibrated
     }
 
     start_cyphal();
@@ -282,6 +307,8 @@ void app() {
     while(true) {
         if (app_manager.is_app_running()) {
             cyphal_loop();
+            persist_pending_config_if_needed();
+            reboot_to_bootloader_if_requested();
         }
 
         millis current_time = millis_32();
@@ -316,8 +343,37 @@ static constexpr CanardPortID FOC_STATE_PORT = 3811;
 static constexpr CanardPortID SPECIFIC_CONTROL_PORT = 3407;
 
 static uint32_t invalid_commands_counter = 0;
+static bool config_save_pending = false;
+static bool bootloader_reboot_pending = false;
 
 using ConfigFloatSetter = void (*)(VBDriveConfig&, float);
+using ConfigFloatGetter = float (*)(const VBDriveConfig&);
+using ConfigU32Setter = bool (*)(VBDriveConfig&, uint32_t);
+using ConfigU32Getter = uint32_t (*)(const VBDriveConfig&);
+
+static bool request_config_save(VBDriveConfig& config) {
+    config.was_configured = config.are_required_params_set();
+    config_save_pending = true;
+    return true;
+}
+
+static void persist_pending_config_if_needed() {
+    if (!config_save_pending) {
+        return;
+    }
+    config_save_pending = false;
+    auto& config = get_app_manager().get_config();
+    config.was_configured = config.are_required_params_set();
+    HAL_IMPORTANT(get_eeprom().write<VBDriveConfig>(&config, CONFIG_PLACEMENT))
+}
+
+static void reboot_to_bootloader_if_requested() {
+    if (!bootloader_reboot_pending) {
+        return;
+    }
+    bootloader_reboot_pending = false;
+    reboot_to_bootloader();
+}
 
 static bool update_persistent_float_register(
     float DriveLimits::* limits_field,
@@ -332,13 +388,46 @@ static bool update_persistent_float_register(
 
     auto& config = get_app_manager().get_config();
     config_setter(config, value);
-    config.was_configured = config.are_required_params_set();
-    HAL_IMPORTANT(get_eeprom().write<VBDriveConfig>(&config, CONFIG_PLACEMENT))
-    return true;
+    return request_config_save(config);
+}
+
+static bool update_persistent_config_float_register(ConfigFloatSetter config_setter, float value) {
+    auto& config = get_app_manager().get_config();
+    config_setter(config, value);
+    return request_config_save(config);
+}
+
+static bool update_persistent_config_u32_register(ConfigU32Setter config_setter, uint32_t value) {
+    auto& config = get_app_manager().get_config();
+    if (!config_setter(config, value)) {
+        return false;
+    }
+    return request_config_save(config);
+}
+
+static bool update_persistent_direction_register(int32_t value) {
+    if (value != -1 && value != 1) {
+        return false;
+    }
+
+    DriveLimits limits = motor->get_limits();
+    limits.user_angle_direction = static_cast<int8_t>(value);
+    if (!motor->set_limits(limits)) {
+        return false;
+    }
+
+    auto& config = get_app_manager().get_config();
+    // Keep EEPROM layout stable: max_voltage is not used by VBDrive runtime.
+    config.max_voltage = static_cast<float>(value);
+    return request_config_save(config);
 }
 
 
 void in_loop_reporting(millis current_t) {
+    if (motor == nullptr) {
+        return;
+    }
+
     static millis report_time = 0;
     EACH_N(current_t, report_time, 1, {
         FOCState::Type state_msg = {};
@@ -419,9 +508,29 @@ public:
 
 // NOTE: underlying CanardRxSubscriptions are HUGE - 552 bytes each. C++ wrapper size is negligible in comparison
 ReservedObject<NodeInfoReader> node_info_reader;
-ReservedObject<RegistersHandler<8>> registers_handler;
+ReservedObject<RegistersHandler<24>> registers_handler;
 ReservedObject<FOCCommandSub> foc_command_sub;
 ReservedObject<SpecificControlSub> specific_control_sub;
+
+static bool parse_bool_register_value_robust(const uavcan_register_Value_1_0& value, bool& parsed) {
+    if (parse_register_bit(value, parsed)) {
+        return true;
+    }
+    if (value.integer32.value.count > 0) {
+        parsed = value.integer32.value.elements[0] != 0;
+        return true;
+    }
+    if (value.natural32.value.count > 0) {
+        parsed = value.natural32.value.elements[0] != 0U;
+        return true;
+    }
+    if (value.real32.value.count > 0) {
+        parsed = value.real32.value.elements[0] != 0.0f;
+        return true;
+    }
+    return false;
+}
+
 void setup_subscriptions() {
     auto cyphal_interface = get_interface();
 
@@ -459,9 +568,64 @@ void setup_subscriptions() {
             }
         };
     };
+    auto make_config_float_register = [](
+        const char* name,
+        ConfigFloatGetter config_getter,
+        ConfigFloatSetter config_setter
+    ) -> RegisterDefinition {
+        return {
+            name,
+            [config_getter, config_setter](
+                const uavcan_register_Value_1_0& v_in,
+                uavcan_register_Value_1_0& v_out,
+                RegisterAccessResponse::Type& response
+            ) {
+                if (v_in._tag_ != REGISTER_EMPTY_TAG) {
+                    float value = 0.0f;
+                    if (parse_register_real32(v_in, value)) {
+                        update_persistent_config_float_register(config_setter, value);
+                    }
+                }
+
+                response.persistent = true;
+                response._mutable = true;
+                fill_register_real32(v_out, config_getter(get_app_manager().get_config()));
+            }
+        };
+    };
+    auto make_config_u32_register = [](
+        const char* name,
+        ConfigU32Getter config_getter,
+        ConfigU32Setter config_setter
+    ) -> RegisterDefinition {
+        return {
+            name,
+            [config_getter, config_setter](
+                const uavcan_register_Value_1_0& v_in,
+                uavcan_register_Value_1_0& v_out,
+                RegisterAccessResponse::Type& response
+            ) {
+                if (v_in._tag_ != REGISTER_EMPTY_TAG) {
+                    uint32_t value = 0;
+                    int32_t signed_value = 0;
+                    if (parse_register_natural32(v_in, value) ||
+                        (parse_register_integer32(v_in, signed_value) && signed_value >= 0)) {
+                        if (v_in._tag_ == REGISTER_INTEGER32_TAG) {
+                            value = static_cast<uint32_t>(signed_value);
+                        }
+                        update_persistent_config_u32_register(config_setter, value);
+                    }
+                }
+
+                response.persistent = true;
+                response._mutable = true;
+                fill_register_natural32(v_out, config_getter(get_app_manager().get_config()));
+            }
+        };
+    };
 
     registers_handler.create(
-        std::array<RegisterDefinition, 8>{{
+        std::array<RegisterDefinition, 24>{{
             {
                 "state.is_on",
                 [](
@@ -471,7 +635,7 @@ void setup_subscriptions() {
                 ){
                     if (v_in._tag_ != REGISTER_EMPTY_TAG) {
                         bool value = false;
-                        if (parse_register_bit(v_in, value)) {
+                        if (parse_bool_register_value_robust(v_in, value)) {
                             motor->set_state(value);
                         }
                     }
@@ -492,6 +656,25 @@ void setup_subscriptions() {
                     response.persistent = false;
                     response._mutable = false;
                     fill_register_natural32(v_out, invalid_commands_counter);
+                }
+            },
+            {
+                "command.bootloader",
+                [](
+                    const uavcan_register_Value_1_0& v_in,
+                    uavcan_register_Value_1_0& v_out,
+                    RegisterAccessResponse::Type& response
+                ){
+                    if (v_in._tag_ != REGISTER_EMPTY_TAG) {
+                        bool value = false;
+                        if (parse_bool_register_value_robust(v_in, value) && value) {
+                            bootloader_reboot_pending = true;
+                        }
+                    }
+
+                    response.persistent = false;
+                    response._mutable = true;
+                    fill_register_bit(v_out, bootloader_reboot_pending);
                 }
             },
             make_persistent_float_register(
@@ -523,6 +706,125 @@ void setup_subscriptions() {
                 "angle.offset",
                 &DriveLimits::user_angle_offset,
                 [](VBDriveConfig& config, float value) { config.angle_offset = value; }
+            ),
+            {
+                "angle.direction",
+                [](
+                    const uavcan_register_Value_1_0& v_in,
+                    uavcan_register_Value_1_0& v_out,
+                    RegisterAccessResponse::Type& response
+                ){
+                    if (v_in._tag_ != REGISTER_EMPTY_TAG) {
+                        int32_t value = 0;
+                        if (parse_register_integer32(v_in, value)) {
+                            update_persistent_direction_register(value);
+                        }
+                    }
+
+                    response.persistent = true;
+                    response._mutable = true;
+                    fill_register_integer32(v_out, motor->get_limits().user_angle_direction);
+                }
+            },
+            make_config_u32_register(
+                "node.id",
+                [](const VBDriveConfig& config) { return static_cast<uint32_t>(config.node_id); },
+                [](VBDriveConfig& config, uint32_t value) {
+                    if (value == 0 || value > 127) {
+                        return false;
+                    }
+                    config.node_id = static_cast<CanardNodeID>(value);
+                    return true;
+                }
+            ),
+            make_config_u32_register(
+                "config.gear",
+                [](const VBDriveConfig& config) { return static_cast<uint32_t>(value_or_default(config.gear_ratio, VBDriveDefaults::GEAR_RATIO, static_cast<uint8_t>(0))); },
+                [](VBDriveConfig& config, uint32_t value) {
+                    if (value == 0 || value > UINT8_MAX) {
+                        return false;
+                    }
+                    config.gear_ratio = static_cast<uint8_t>(value);
+                    return true;
+                }
+            ),
+            make_config_u32_register(
+                "config.nominal_baud",
+                [](const VBDriveConfig& config) { return static_cast<uint32_t>(config.fdcan_nominal_baud); },
+                [](VBDriveConfig& config, uint32_t value) {
+                    if (value > static_cast<uint32_t>(FDCANNominalBaud::KHz1000)) {
+                        return false;
+                    }
+                    config.fdcan_nominal_baud = static_cast<FDCANNominalBaud>(value);
+                    return true;
+                }
+            ),
+            make_config_u32_register(
+                "config.data_baud",
+                [](const VBDriveConfig& config) { return static_cast<uint32_t>(config.fdcan_data_baud); },
+                [](VBDriveConfig& config, uint32_t value) {
+                    if (value > static_cast<uint32_t>(FDCANDataBaud::KHz8000)) {
+                        return false;
+                    }
+                    config.fdcan_data_baud = static_cast<FDCANDataBaud>(value);
+                    return true;
+                }
+            ),
+            make_config_u32_register(
+                "config.angle_encoder",
+                [](const VBDriveConfig& config) { return static_cast<uint32_t>(to_underlying(config.angle_encoder)); },
+                [](VBDriveConfig& config, uint32_t value) {
+                    if (value > static_cast<uint32_t>(to_underlying(AngleEncoderType::SHAFT))) {
+                        return false;
+                    }
+                    config.angle_encoder = static_cast<AngleEncoderType>(value);
+                    return true;
+                }
+            ),
+            make_config_float_register(
+                "motor.torque_constant",
+                [](const VBDriveConfig& config) { return value_or_default(config.torque_const, VBDriveDefaults::TORQUE_CONST); },
+                [](VBDriveConfig& config, float value) { config.torque_const = value; }
+            ),
+            make_config_float_register(
+                "foc.kp",
+                [](const VBDriveConfig& config) { return value_or_default(config.kp, VBDriveDefaults::PID_KP); },
+                [](VBDriveConfig& config, float value) { config.kp = value; }
+            ),
+            make_config_float_register(
+                "foc.ki",
+                [](const VBDriveConfig& config) { return value_or_default(config.ki, VBDriveDefaults::PID_KI); },
+                [](VBDriveConfig& config, float value) { config.ki = value; }
+            ),
+            make_config_float_register(
+                "foc.kd",
+                [](const VBDriveConfig& config) { return value_or_default(config.kd, VBDriveDefaults::PID_KD); },
+                [](VBDriveConfig& config, float value) { config.kd = value; }
+            ),
+            make_config_float_register(
+                "filter.a",
+                [](const VBDriveConfig& config) { return value_or_default(config.filter_a, VBDriveDefaults::FILTER_A); },
+                [](VBDriveConfig& config, float value) { config.filter_a = value; }
+            ),
+            make_config_float_register(
+                "filter.g1",
+                [](const VBDriveConfig& config) { return value_or_default(config.filter_g1, VBDriveDefaults::FILTER_G1); },
+                [](VBDriveConfig& config, float value) { config.filter_g1 = value; }
+            ),
+            make_config_float_register(
+                "filter.g2",
+                [](const VBDriveConfig& config) { return value_or_default(config.filter_g2, VBDriveDefaults::FILTER_G2); },
+                [](VBDriveConfig& config, float value) { config.filter_g2 = value; }
+            ),
+            make_config_float_register(
+                "filter.g3",
+                [](const VBDriveConfig& config) { return value_or_default(config.filter_g3, VBDriveDefaults::FILTER_G3); },
+                [](VBDriveConfig& config, float value) { config.filter_g3 = value; }
+            ),
+            make_config_float_register(
+                "filter.i_lpf",
+                [](const VBDriveConfig& config) { return value_or_default(config.I_lpf_coefficient, VBDriveDefaults::I_LPF); },
+                [](VBDriveConfig& config, float value) { config.I_lpf_coefficient = value; }
             )
         }},
         cyphal_interface
